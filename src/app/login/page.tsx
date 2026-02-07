@@ -11,11 +11,11 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@/src/app/ui/card";
-import { Button } from "@/src/app/ui/button";
-import { Input } from "@/src/app/ui/input";
-import { Label } from "@/src/app/ui/label";
-import { Alert, AlertDescription } from "@/src/app/ui/alert";
+} from "@/src/app/components/ui/card";
+import { Button } from "@/src/app/components/ui/button";
+import { Input } from "@/src/app/components/ui/input";
+import { Label } from "@/src/app/components/ui/label";
+import { Alert, AlertDescription } from "@/src/app/components/ui/alert";
 
 type AuthResponse = {
   localId?: string;
