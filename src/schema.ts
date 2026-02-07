@@ -15,6 +15,24 @@ export const suggestionSchema = z.object({
   }))
 });
 
+export const dailyTaskSchema = z.object({
+  title: z.string(),
+  carbonOffsetKg: z.number(),
+  difficulty: z.enum(["easy", "medium", "hard"]).optional(),
+  reason: z.string().optional()
+});
+
+export const dailyTasksSchema = z.object({
+  tasks: z.array(dailyTaskSchema).length(10)
+});
+
+export const completeTaskRequestSchema = z.object({
+  dailyTaskId: z.string().min(1),
+  imageUrl: z.string().url().optional()
+});
+
 export type SuggestionResponse = z.infer<typeof suggestionSchema>;
+export type DailyTasksResponse = z.infer<typeof dailyTasksSchema>;
 export type RawAnswersMap = Record<string, unknown>;
 export type SuggestionRequestBody = z.infer<typeof suggestionRequestSchema>;
+export type CompleteTaskRequestBody = z.infer<typeof completeTaskRequestSchema>;

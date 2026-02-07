@@ -1,8 +1,8 @@
-import { generateSuggestions } from "../../../src/ai";
-import { calculateFootprint, mapAnswersToFootprintInput } from "../../../src/footprint";
-import { QUESTIONNAIRE_V1 } from "../../../src/questionnaire";
-import { suggestionRequestSchema } from "../../../src/schema";
-import { AnswerValidationError, validateAnswers } from "../../../src/validateAnswers";
+import { generateSuggestions } from "../../../ai";
+import { calculateFootprint, mapAnswersToFootprintInput } from "../../../footprint";
+import { QUESTIONNAIRE_V1 } from "../../../questionnaire";
+import { suggestionRequestSchema } from "../../../schema";
+import { AnswerValidationError, validateAnswers } from "../../../validateAnswers";
 
 export async function POST(request: Request): Promise<Response> {
   let jsonBody: unknown;

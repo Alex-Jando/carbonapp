@@ -54,10 +54,10 @@ export async function POST(request: Request) {
       city: { stringValue: "" },
       friends: { arrayValue: { values: [] } },
       communities: { arrayValue: { values: [] } },
-      initialFootprintKg: { integerValue: "0" },
-      carbonOffsetKg: { integerValue: "0" },
-      tasks: { arrayValue: { values: [] } },
-    },
+      initialFootprintKg: { nullValue: null },
+      carbonOffsetKgTotal: { integerValue: "0" },
+      tasks: { arrayValue: { values: [] } }
+    }
   };
 
   const firestoreRes = await fetch(

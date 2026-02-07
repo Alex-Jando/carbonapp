@@ -1,4 +1,4 @@
-import { suggestionSchema, type SuggestionResponse } from "./schema";
+import { dailyTasksSchema, suggestionSchema, type DailyTasksResponse, type SuggestionResponse } from "./schema";
 import type { FootprintResult } from "./footprint";
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
@@ -37,7 +37,7 @@ function extractJsonContent(raw: string): string {
 }
 
 export async function generateSuggestions(input: SuggestionInput): Promise<SuggestionResponse | null> {
-  const apiKey = process.env.OPENROUTER_API_KEY;
+  const apiKey = process.env.OPENROUTER_API_KEY ?? process.env.OPENROUTER_APIKEY;
   const model = process.env.MODEL_ID || DEFAULT_MODEL;
 
   if (!apiKey) {
@@ -124,6 +124,112 @@ export async function generateSuggestions(input: SuggestionInput): Promise<Sugge
       console.error("Raw AI response:", rawContent);
     }
     console.error("Failed to generate or parse AI suggestions:", error);
+    return null;
+  }
+}
+
+type DailyTaskInput = {
+  dateKey: string;
+  userProfile: {
+    username?: string;
+    email?: string;
+    city?: string;
+    initialFootprintKg?: number | null;
+    carbonOffsetKgTotal?: number | null;
+  };
+  context?: {
+    topActions?: SuggestionResponse["top_actions"];
+  };
+};
+
+function clampTaskValue(value: number, min = 0, max = 50): number {
+  if (!Number.isFinite(value)) return min;
+  return Math.min(Math.max(value, min), max);
+}
+
+export async function generateDailyTasks(input: DailyTaskInput): Promise<DailyTasksResponse | null> {
+  const apiKey = process.env.OPENROUTER_API_KEY ?? process.env.OPENROUTER_APIKEY;
+  const model = process.env.MODEL_ID || DEFAULT_MODEL;
+
+  if (!apiKey) {
+    console.error("OPENROUTER_API_KEY is missing.");
+    return null;
+  }
+
+  let rawContent: string | undefined;
+
+  try {
+    const response = await fetch(OPENROUTER_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model,
+        temperature: 0.2,
+        messages: [
+          {
+            role: "system",
+            content: [
+              "You generate daily carbon-reduction tasks.",
+              "Output STRICT JSON only. No markdown. No commentary.",
+              "Return exactly 10 tasks.",
+              "Tasks must be low-effort and realistic for the next 24 hours.",
+              "No major purchases or big lifestyle changes.",
+              "Each task title must start with a verb.",
+              "Each task must include: title, carbonOffsetKg, difficulty, reason.",
+              "JSON schema:",
+              "{",
+              '  "tasks": [',
+              "    {",
+              '      "title": "string",',
+              '      "carbonOffsetKg": 0,',
+              '      "difficulty": "easy|medium|hard",',
+              '      "reason": "string"',
+              "    }",
+              "  ]",
+              "}"
+            ].join("\n")
+          },
+          {
+            role: "user",
+            content: JSON.stringify(input)
+          }
+        ]
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("OpenRouter request failed:", response.status, errorText);
+      return null;
+    }
+
+    const data = (await response.json()) as ChatCompletionResponse;
+    rawContent = data.choices?.[0]?.message?.content;
+
+    if (!rawContent) {
+      console.error("No AI response content returned.");
+      return null;
+    }
+
+    const parsed = JSON.parse(extractJsonContent(rawContent));
+    const result = dailyTasksSchema.parse(parsed);
+
+    return {
+      tasks: result.tasks.map((task) => ({
+        title: task.title.trim(),
+        carbonOffsetKg: clampTaskValue(task.carbonOffsetKg),
+        difficulty: task.difficulty,
+        reason: task.reason
+      }))
+    };
+  } catch (error) {
+    if (rawContent) {
+      console.error("Raw AI response:", rawContent);
+    }
+    console.error("Failed to generate or parse daily tasks:", error);
     return null;
   }
 }

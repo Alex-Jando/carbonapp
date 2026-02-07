@@ -38,7 +38,7 @@ export default function LoginPage() {
         localStorage.setItem("auth_id_token", data.idToken);
       }
       localStorage.setItem("auth_local_id", data.localId);
-      router.push("/home");
+      router.push("/questionnaire");
     } catch {
       setError("Login failed.");
     } finally {
