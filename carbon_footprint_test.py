@@ -707,9 +707,9 @@ def generate_summary(total_footprint, all_notes):
     print(f"\n📊 Total Estimated Annual Carbon Footprint: {total_footprint:,.0f} kg CO₂")
     
     # Canada's average is approximately 15,600 kg per person per year (15.6 tons)
-    CANADA_AVERAGE = 15600
-    global_average = 4700
-    sustainable_target = 2000
+    CANADA_AVERAGE = 1499
+    global_average = 480
+    sustainable_target = 230
     
     # Comparison to Canada's average
     print(f"\n🇨🇦 Comparison to Canada's Average:")
