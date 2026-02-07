@@ -96,38 +96,51 @@ export async function POST(request: Request) {
   const uid = decoded.uid;
   const adminDb = getAdminDb();
   const userRef = adminDb.collection("users").doc(uid);
-  const taskRef = userRef.collection("dailyTasks").doc(dailyTaskId);
+  const tasksRef = adminDb.collection("tasks");
 
   let completedTaskId = "";
   let carbonOffsetKg = 0;
 
   try {
     await adminDb.runTransaction(async (transaction) => {
-      const taskSnap = await transaction.get(taskRef);
-      if (!taskSnap.exists) {
+      const userSnap = await transaction.get(userRef);
+      if (!userSnap.exists) {
+        throw new Error("USER_NOT_FOUND");
+      }
+
+      const userData = userSnap.data() ?? {};
+      const dailyTasks: Array<Record<string, unknown>> = Array.isArray(userData.dailyTasks)
+        ? userData.dailyTasks
+        : [];
+
+      const taskIndex = dailyTasks.findIndex((task) => task.id === dailyTaskId);
+      if (taskIndex === -1) {
         throw new Error("DAILY_TASK_NOT_FOUND");
       }
 
-      const taskData = taskSnap.data() ?? {};
+      const taskData = dailyTasks[taskIndex];
       carbonOffsetKg = Number(taskData.carbonOffsetKg) || 0;
       const dateKey = String(taskData.dateKey || getTorontoDateKey());
 
-      const completedRef = userRef.collection("completedTasks").doc();
+      const completedRef = tasksRef.doc(dailyTaskId);
       completedTaskId = completedRef.id;
 
       transaction.set(completedRef, {
+        uid,
         title: taskData.title ?? "Untitled task",
         carbonOffsetKg,
         imageUrl: imageUrl ?? null,
         dateKey,
         completedAt: getFieldValue().serverTimestamp(),
-        sourceDailyTaskId: taskRef.id
+        sourceDailyTaskId: dailyTaskId
       });
 
-      transaction.delete(taskRef);
+      const updatedDailyTasks = dailyTasks.filter((task) => task.id !== dailyTaskId);
       transaction.set(
         userRef,
         {
+          dailyTasks: updatedDailyTasks,
+          completedTaskIds: getFieldValue().arrayUnion(completedTaskId),
           carbonOffsetKgTotal: getFieldValue().increment(carbonOffsetKg),
           updatedAt: getFieldValue().serverTimestamp()
         },
@@ -138,21 +151,23 @@ export async function POST(request: Request) {
     if (error instanceof Error && error.message === "DAILY_TASK_NOT_FOUND") {
       return NextResponse.json({ error: "Daily task not found." }, { status: 404 });
     }
+    if (error instanceof Error && error.message === "USER_NOT_FOUND") {
+      return NextResponse.json({ error: "User not found." }, { status: 404 });
+    }
     return NextResponse.json({ error: "Failed to complete task." }, { status: 500 });
   }
 
-  const todayKey = getTorontoDateKey();
-  const remainingSnap = await userRef
-    .collection("dailyTasks")
-    .where("dateKey", "==", todayKey)
-    .get();
+  const remainingSnap = await userRef.get();
+  const remainingTasks = Array.isArray(remainingSnap.data()?.dailyTasks)
+    ? remainingSnap.data()?.dailyTasks.length
+    : 0;
 
   return NextResponse.json(
     {
       ok: true,
       completedTaskId,
       carbonOffsetKg,
-      remainingTasksCount: remainingSnap.size
+      remainingTasksCount: remainingTasks
     },
     { status: 200 }
   );

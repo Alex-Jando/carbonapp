@@ -85,21 +85,30 @@ export default function HomePage() {
 
   async function compressImage(file: File): Promise<Blob> {
     const imageBitmap = await createImageBitmap(file);
-    const maxWidth = 800;
-    const scale = Math.min(1, maxWidth / imageBitmap.width);
+    const size = 300;
     const canvas = document.createElement("canvas");
-    canvas.width = Math.round(imageBitmap.width * scale);
-    canvas.height = Math.round(imageBitmap.height * scale);
+    canvas.width = size;
+    canvas.height = size;
     const ctx = canvas.getContext("2d");
     if (!ctx) {
       return file;
     }
-    ctx.drawImage(imageBitmap, 0, 0, canvas.width, canvas.height);
+
+    const scale = Math.max(size / imageBitmap.width, size / imageBitmap.height);
+    const drawWidth = imageBitmap.width * scale;
+    const drawHeight = imageBitmap.height * scale;
+    const offsetX = (size - drawWidth) / 2;
+    const offsetY = (size - drawHeight) / 2;
+
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, size, size);
+    ctx.drawImage(imageBitmap, offsetX, offsetY, drawWidth, drawHeight);
+
     return await new Promise<Blob>((resolve) => {
       canvas.toBlob(
         (blob) => resolve(blob ?? file),
         "image/jpeg",
-        0.6
+        0.4
       );
     });
   }

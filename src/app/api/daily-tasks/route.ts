@@ -6,12 +6,13 @@ import { generateDailyTasks } from "../../../ai";
 export const runtime = "nodejs";
 
 type DailyTaskDoc = {
+  id: string;
   title: string;
   carbonOffsetKg: number;
   difficulty?: "easy" | "medium" | "hard";
   reason?: string;
   dateKey: string;
-  createdAt: FirebaseFirestore.FieldValue;
+  createdAt: string;
 };
 
 function getTorontoDateKey(date = new Date()): string {
@@ -73,15 +74,6 @@ function getBearerToken(request: Request): string | null {
   return match ? match[1] : null;
 }
 
-async function deleteExistingDailyTasks(userRef: FirebaseFirestore.DocumentReference) {
-  const snapshot = await userRef.collection("dailyTasks").get();
-  if (snapshot.empty) return;
-
-  const batch = getAdminDb().batch();
-  snapshot.docs.forEach((doc) => batch.delete(doc.ref));
-  await batch.commit();
-}
-
 export async function GET(request: Request) {
   const token = getBearerToken(request);
   if (!token) {
@@ -105,20 +97,10 @@ export async function GET(request: Request) {
 
   const dailyTasksMeta = userData.dailyTasksMeta ?? null;
   const metaDateKey = dailyTasksMeta?.dateKey ?? null;
+  const storedDailyTasks = Array.isArray(userData.dailyTasks) ? userData.dailyTasks : [];
 
   if (metaDateKey === dateKey) {
-    const tasksSnap = await userRef
-      .collection("dailyTasks")
-      .where("dateKey", "==", dateKey)
-      .orderBy("createdAt", "asc")
-      .get();
-
-    const tasks = tasksSnap.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data()
-    }));
-
-    return NextResponse.json({ dateKey, tasks }, { status: 200 });
+    return NextResponse.json({ dateKey, tasks: storedDailyTasks }, { status: 200 });
   }
 
   const generated = await generateDailyTasks({
@@ -136,25 +118,20 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Failed to generate daily tasks." }, { status: 500 });
   }
 
-  await deleteExistingDailyTasks(userRef);
-
-  const batch = adminDb.batch();
-  const createdAt = getFieldValue().serverTimestamp();
-  const tasks: Array<{ id: string } & DailyTaskDoc> = [];
+  const tasks: DailyTaskDoc[] = [];
 
   for (const task of generated.tasks) {
-    const docRef = userRef.collection("dailyTasks").doc();
-    const payload: DailyTaskDoc = {
+    const taskId = adminDb.collection("_").doc().id;
+    tasks.push({
+      id: taskId,
       title: task.title,
       carbonOffsetKg: task.carbonOffsetKg,
       difficulty: task.difficulty,
       reason: task.reason,
       dateKey,
-    createdAt
-  };
-  batch.set(docRef, payload);
-  tasks.push({ id: docRef.id, ...payload });
-}
+      createdAt: new Date().toISOString()
+    });
+  }
 
   const userUpdate = {
     username: userData.username ?? "",
@@ -166,11 +143,11 @@ export async function GET(request: Request) {
       dateKey,
       generatedAt: getFieldValue().serverTimestamp()
     },
+    dailyTasks: tasks,
     updatedAt: getFieldValue().serverTimestamp()
   };
 
-  batch.set(userRef, userUpdate, { merge: true });
-  await batch.commit();
+  await userRef.set(userUpdate, { merge: true });
 
   return NextResponse.json({ dateKey, tasks }, { status: 200 });
 }
