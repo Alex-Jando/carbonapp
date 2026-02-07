@@ -1,0 +1,40 @@
+{
+  "name": "carbonapp",
+  "version": "1.0.0",
+  "description": "- Alexander Jando\r - Chris Li\r - Ben Rosa\r - Sophia Bianchi",
+  "homepage": "https://github.com/Alex-Jando/carbonapp#readme",
+  "bugs": {
+    "url": "https://github.com/Alex-Jando/carbonapp/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Alex-Jando/carbonapp.git"
+  },
+  "license": "MIT",
+  "author": "",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "axios": "^1.13.4",
+    "firebase": "^12.9.0",
+    "next": "^16.1.6",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4"
+  },
+  "devDependencies": {
+    "@types/node": "^25.2.1",
+    "@types/react": "^19.2.13",
+    "@types/react-dom": "^19.2.3",
+    "eslint": "^9.39.2",
+    "eslint-config-next": "^16.1.6",
+    "typescript": "^5.9.3"
+  }
+}
+
