@@ -1,12 +1,34 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { initializeApp, getApps, getApp } from "firebase/app";
+import { getStorage } from "firebase/storage";
+
+function getFirebaseStorage() {
+  const firebaseConfig = {
+    apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+    authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+    projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+    storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+    appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID
+  };
+
+  const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+  return getStorage(app);
+}
 
 export default function HomePage() {
   const router = useRouter();
   const [localId, setLocalId] = useState<string | null>(null);
   const [initialFootprintKg, setInitialFootprintKg] = useState<number | null>(null);
+  const [dateKey, setDateKey] = useState<string | null>(null);
+  const [tasks, setTasks] = useState<Array<Record<string, unknown>>>([]);
+  const [loadingTasks, setLoadingTasks] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [filesByTask, setFilesByTask] = useState<Record<string, File | null>>({});
 
   useEffect(() => {
     const storedId = localStorage.getItem("auth_local_id");
@@ -32,8 +54,26 @@ export default function HomePage() {
       }
     };
 
-    void loadProfile();
+    const loadTasks = async () => {
+      setLoadingTasks(true);
+      setError(null);
+      const res = await fetch("/api/daily-tasks", {
+        headers: { Authorization: `Bearer ${idToken}` }
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "Failed to load daily tasks.");
+      } else {
+        setDateKey(data.dateKey ?? null);
+        setTasks(Array.isArray(data.tasks) ? data.tasks : []);
+      }
+      setLoadingTasks(false);
+    };
+
+    void loadProfile().then(() => loadTasks());
   }, [router]);
+
+  const remainingTasks = useMemo(() => tasks.length, [tasks.length]);
 
   if (!localId || initialFootprintKg === null) {
     return (
@@ -41,6 +81,69 @@ export default function HomePage() {
         <p>Loading...</p>
       </main>
     );
+  }
+
+  async function compressImage(file: File): Promise<Blob> {
+    const imageBitmap = await createImageBitmap(file);
+    const maxWidth = 800;
+    const scale = Math.min(1, maxWidth / imageBitmap.width);
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(imageBitmap.width * scale);
+    canvas.height = Math.round(imageBitmap.height * scale);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      return file;
+    }
+    ctx.drawImage(imageBitmap, 0, 0, canvas.width, canvas.height);
+    return await new Promise<Blob>((resolve) => {
+      canvas.toBlob(
+        (blob) => resolve(blob ?? file),
+        "image/jpeg",
+        0.6
+      );
+    });
+  }
+
+  async function handleCompleteTask(taskId: string) {
+    setError(null);
+    const idToken = localStorage.getItem("auth_id_token");
+    const uid = localStorage.getItem("auth_local_id");
+    if (!idToken || !uid) {
+      router.replace("/login");
+      return;
+    }
+
+    let imageUrl: string | undefined;
+    const file = filesByTask[taskId] ?? null;
+    if (file && dateKey) {
+      const storage = getFirebaseStorage();
+      const compressed = await compressImage(file);
+      const storageRef = ref(storage, `taskProof/${uid}/${dateKey}/${taskId}.jpg`);
+      await uploadBytes(storageRef, compressed, { contentType: "image/jpeg" });
+      imageUrl = await getDownloadURL(storageRef);
+    }
+
+    const res = await fetch("/api/complete-task", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${idToken}`
+      },
+      body: JSON.stringify({ dailyTaskId: taskId, imageUrl })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      setError(data.error ?? "Failed to complete task.");
+      return;
+    }
+
+    setTasks((prev) => prev.filter((task) => task.id !== taskId));
+    setFilesByTask((prev) => {
+      const next = { ...prev };
+      delete next[taskId];
+      return next;
+    });
   }
 
   async function handleLogout() {
@@ -55,6 +158,35 @@ export default function HomePage() {
       <h1>Home</h1>
       <p>User ID: {localId}</p>
       <p>Initial Footprint (kg/year): {initialFootprintKg}</p>
+      <p>Daily tasks remaining: {remainingTasks}</p>
+      {error ? <p>{error}</p> : null}
+      {loadingTasks ? <p>Loading tasks...</p> : null}
+      <section>
+        <h2>Daily Tasks</h2>
+        {tasks.length === 0 && !loadingTasks ? <p>No tasks found.</p> : null}
+        {tasks.map((task) => (
+          <div key={String(task.id)}>
+            <h3>{String(task.title ?? "Untitled task")}</h3>
+            <p>Carbon Offset (kg): {Number(task.carbonOffsetKg ?? 0)}</p>
+            {task.difficulty ? <p>Difficulty: {String(task.difficulty)}</p> : null}
+            {task.reason ? <p>Reason: {String(task.reason)}</p> : null}
+            <label>
+              Upload proof (optional)
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(event) => {
+                  const file = event.target.files?.[0] ?? null;
+                  setFilesByTask((prev) => ({ ...prev, [String(task.id)]: file }));
+                }}
+              />
+            </label>
+            <button type="button" onClick={() => handleCompleteTask(String(task.id))}>
+              Complete
+            </button>
+          </div>
+        ))}
+      </section>
       <button type="button" onClick={handleLogout}>
         Logout
       </button>

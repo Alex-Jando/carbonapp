@@ -1,7 +1,62 @@
 import { NextResponse } from "next/server";
+import admin from "firebase-admin";
+import { readFileSync } from "fs";
 import { completeTaskRequestSchema } from "../../../schema";
-import { getTorontoDateKey } from "../../../lib/dateKey";
-import { adminAuth, adminDb, adminFieldValue } from "../../../lib/firebaseAdmin";
+
+export const runtime = "nodejs";
+
+function getTorontoDateKey(date = new Date()): string {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Toronto",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  });
+  return formatter.format(date);
+}
+
+function resolveServiceAccount() {
+  const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (trimmed.startsWith("{")) {
+    return JSON.parse(trimmed);
+  }
+  try {
+    const fileContent = readFileSync(trimmed, "utf-8");
+    return JSON.parse(fileContent);
+  } catch {
+    return null;
+  }
+}
+
+function getAdminApp() {
+  if (!admin.apps.length) {
+    const serviceAccount = resolveServiceAccount();
+    if (serviceAccount) {
+      admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount)
+      });
+    } else {
+      admin.initializeApp({
+        credential: admin.credential.applicationDefault()
+      });
+    }
+  }
+  return admin.app();
+}
+
+function getAdminAuth() {
+  return getAdminApp().auth();
+}
+
+function getAdminDb() {
+  return getAdminApp().firestore();
+}
+
+function getFieldValue() {
+  return admin.firestore.FieldValue;
+}
 
 function getBearerToken(request: Request): string | null {
   const authHeader = request.headers.get("authorization") ?? "";
@@ -17,7 +72,7 @@ export async function POST(request: Request) {
 
   let decoded;
   try {
-    decoded = await adminAuth.verifyIdToken(token);
+    decoded = await getAdminAuth().verifyIdToken(token);
   } catch {
     return NextResponse.json({ error: "Invalid or expired token." }, { status: 401 });
   }
@@ -39,6 +94,7 @@ export async function POST(request: Request) {
 
   const { dailyTaskId, imageUrl } = parsedBody.data;
   const uid = decoded.uid;
+  const adminDb = getAdminDb();
   const userRef = adminDb.collection("users").doc(uid);
   const taskRef = userRef.collection("dailyTasks").doc(dailyTaskId);
 
@@ -64,7 +120,7 @@ export async function POST(request: Request) {
         carbonOffsetKg,
         imageUrl: imageUrl ?? null,
         dateKey,
-        completedAt: adminFieldValue.serverTimestamp(),
+        completedAt: getFieldValue().serverTimestamp(),
         sourceDailyTaskId: taskRef.id
       });
 
@@ -72,8 +128,8 @@ export async function POST(request: Request) {
       transaction.set(
         userRef,
         {
-          carbonOffsetKgTotal: adminFieldValue.increment(carbonOffsetKg),
-          updatedAt: adminFieldValue.serverTimestamp()
+          carbonOffsetKgTotal: getFieldValue().increment(carbonOffsetKg),
+          updatedAt: getFieldValue().serverTimestamp()
         },
         { merge: true }
       );
