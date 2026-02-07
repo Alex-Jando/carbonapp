@@ -17,6 +17,12 @@ export default function SocialPage() {
   const [communities, setCommunities] = useState<CommunitySummary[]>([]);
   const [status, setStatus] = useState<string | null>(null);
 
+  function handleAuthFailure() {
+    localStorage.removeItem("auth_id_token");
+    localStorage.removeItem("auth_local_id");
+    router.replace("/login");
+  }
+
   useEffect(() => {
     const token = localStorage.getItem("auth_id_token");
     if (!token) {
@@ -28,6 +34,10 @@ export default function SocialPage() {
       const res = await fetch("/api/social/all-communities", {
         headers: { Authorization: `Bearer ${token}` }
       });
+      if (res.status === 401) {
+        handleAuthFailure();
+        return;
+      }
       const data = await res.json();
       if (res.ok && Array.isArray(data.communities)) {
         setCommunities(data.communities);
@@ -51,6 +61,10 @@ export default function SocialPage() {
       },
       body: JSON.stringify(body)
     });
+    if (res.status === 401) {
+      handleAuthFailure();
+      return null;
+    }
     const data = await res.json();
     if (!res.ok) {
       setStatus(data.error ?? "Request failed.");

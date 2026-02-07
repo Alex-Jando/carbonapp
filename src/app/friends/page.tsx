@@ -14,6 +14,12 @@ export default function FriendsPage() {
   const [friends, setFriends] = useState<Friend[]>([]);
   const [error, setError] = useState<string | null>(null);
 
+  function handleAuthFailure() {
+    localStorage.removeItem("auth_id_token");
+    localStorage.removeItem("auth_local_id");
+    router.replace("/login");
+  }
+
   useEffect(() => {
     const token = localStorage.getItem("auth_id_token");
     if (!token) {
@@ -25,6 +31,10 @@ export default function FriendsPage() {
       const meRes = await fetch("/api/social/me", {
         headers: { Authorization: `Bearer ${token}` }
       });
+      if (meRes.status === 401) {
+        handleAuthFailure();
+        return;
+      }
       const meData = await meRes.json();
       if (!meRes.ok) {
         setError(meData.error ?? "Failed to load profile.");
@@ -37,6 +47,10 @@ export default function FriendsPage() {
         const res = await fetch(`/api/social/user?uid=${encodeURIComponent(id)}`, {
           headers: { Authorization: `Bearer ${token}` }
         });
+        if (res.status === 401) {
+          handleAuthFailure();
+          return;
+        }
         const data = await res.json();
         if (res.ok) {
           results.push({

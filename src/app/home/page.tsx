@@ -30,6 +30,12 @@ export default function HomePage() {
   const [error, setError] = useState<string | null>(null);
   const [filesByTask, setFilesByTask] = useState<Record<string, File | null>>({});
 
+  function handleAuthFailure() {
+    localStorage.removeItem("auth_id_token");
+    localStorage.removeItem("auth_local_id");
+    router.replace("/login");
+  }
+
   useEffect(() => {
     const storedId = localStorage.getItem("auth_local_id");
     const idToken = localStorage.getItem("auth_id_token");
@@ -43,6 +49,10 @@ export default function HomePage() {
       const res = await fetch(`/api/profile?localId=${encodeURIComponent(storedId)}`, {
         headers: { Authorization: `Bearer ${idToken}` }
       });
+      if (res.status === 401) {
+        handleAuthFailure();
+        return;
+      }
       const data = await res.json();
       if (res.ok) {
         const footprint = typeof data.initialFootprintKg === "number" ? data.initialFootprintKg : null;
@@ -60,6 +70,10 @@ export default function HomePage() {
       const res = await fetch("/api/daily-tasks", {
         headers: { Authorization: `Bearer ${idToken}` }
       });
+      if (res.status === 401) {
+        handleAuthFailure();
+        return;
+      }
       const data = await res.json();
       if (!res.ok) {
         setError(data.error ?? "Failed to load daily tasks.");
@@ -141,6 +155,10 @@ export default function HomePage() {
       body: JSON.stringify({ dailyTaskId: taskId, imageUrl })
     });
 
+    if (res.status === 401) {
+      handleAuthFailure();
+      return;
+    }
     const data = await res.json();
     if (!res.ok) {
       setError(data.error ?? "Failed to complete task.");

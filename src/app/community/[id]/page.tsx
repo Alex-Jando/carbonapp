@@ -17,6 +17,12 @@ export default function CommunityDetailPage() {
   const [members, setMembers] = useState<Member[]>([]);
   const [error, setError] = useState<string | null>(null);
 
+  function handleAuthFailure() {
+    localStorage.removeItem("auth_id_token");
+    localStorage.removeItem("auth_local_id");
+    router.replace("/login");
+  }
+
   useEffect(() => {
     const token = localStorage.getItem("auth_id_token");
     if (!token) {
@@ -28,6 +34,10 @@ export default function CommunityDetailPage() {
       const res = await fetch(`/api/social/community?communityId=${encodeURIComponent(communityId)}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
+      if (res.status === 401) {
+        handleAuthFailure();
+        return;
+      }
       const data = await res.json();
       if (!res.ok) {
         setError(data.error ?? "Failed to load community.");
@@ -41,6 +51,10 @@ export default function CommunityDetailPage() {
         const memberRes = await fetch(`/api/social/user?uid=${encodeURIComponent(id)}`, {
           headers: { Authorization: `Bearer ${token}` }
         });
+        if (memberRes.status === 401) {
+          handleAuthFailure();
+          return;
+        }
         const memberData = await memberRes.json();
         if (memberRes.ok) {
           memberResults.push({

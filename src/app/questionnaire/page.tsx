@@ -32,6 +32,12 @@ export default function QuestionnairePage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  function handleAuthFailure() {
+    localStorage.removeItem("auth_id_token");
+    localStorage.removeItem("auth_local_id");
+    router.replace("/login");
+  }
+
   useEffect(() => {
     const idToken = localStorage.getItem("auth_id_token");
     const localId = localStorage.getItem("auth_local_id");
@@ -44,6 +50,10 @@ export default function QuestionnairePage() {
       const res = await fetch(`/api/profile?localId=${encodeURIComponent(localId)}`, {
         headers: { Authorization: `Bearer ${idToken}` }
       });
+      if (res.status === 401) {
+        handleAuthFailure();
+        return;
+      }
       const data = (await res.json()) as ProfileResponse;
       if (res.ok && data.initialFootprintKg !== null && data.initialFootprintKg > 0) {
         router.replace("/home");
@@ -169,23 +179,27 @@ export default function QuestionnairePage() {
     }
 
     try {
-      const res = await fetch("/api/questionnaire/submit", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${idToken}`
-        },
-        body: JSON.stringify({
-          questionnaireVersion: "v1",
-          answers,
-          localId
-        })
-      });
+    const res = await fetch("/api/questionnaire/submit", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${idToken}`
+      },
+      body: JSON.stringify({
+        questionnaireVersion: "v1",
+        answers,
+        localId
+      })
+    });
 
-      const data = (await res.json()) as SubmitResponse;
-      if (!res.ok) {
-        setError(data.error ?? "Failed to submit questionnaire.");
-        return;
+    if (res.status === 401) {
+      handleAuthFailure();
+      return;
+    }
+    const data = (await res.json()) as SubmitResponse;
+    if (!res.ok) {
+      setError(data.error ?? "Failed to submit questionnaire.");
+      return;
       }
 
       router.push("/home");

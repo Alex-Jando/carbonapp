@@ -19,6 +19,12 @@ export default function FriendDetailPage() {
   const [profile, setProfile] = useState<FriendProfile | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  function handleAuthFailure() {
+    localStorage.removeItem("auth_id_token");
+    localStorage.removeItem("auth_local_id");
+    router.replace("/login");
+  }
+
   useEffect(() => {
     const token = localStorage.getItem("auth_id_token");
     if (!token) {
@@ -30,6 +36,10 @@ export default function FriendDetailPage() {
       const res = await fetch(`/api/social/user?uid=${encodeURIComponent(uid)}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
+      if (res.status === 401) {
+        handleAuthFailure();
+        return;
+      }
       const data = await res.json();
       if (!res.ok) {
         setError(data.error ?? "Failed to load friend.");
