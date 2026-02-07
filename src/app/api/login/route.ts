@@ -6,11 +6,11 @@ type AuthBody = {
 };
 
 export async function POST(request: Request) {
-  const apiKey = process.env.FIREBASE_API_KEY;
+  const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
-      { error: "Server is missing FIREBASE_API_KEY." },
-      { status: 500 }
+      { error: "Server is missing NEXT_PUBLIC_FIREBASE_API_KEY." },
+      { status: 500 },
     );
   }
 
@@ -27,7 +27,7 @@ export async function POST(request: Request) {
   if (!email || !password) {
     return NextResponse.json(
       { error: "Email and password are required." },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -42,7 +42,7 @@ export async function POST(request: Request) {
   if (!res.ok) {
     return NextResponse.json(
       { error: data?.error?.message ?? "Login failed." },
-      { status: res.status }
+      { status: res.status },
     );
   }
 
@@ -54,6 +54,6 @@ export async function POST(request: Request) {
       refreshToken: data.refreshToken,
       expiresIn: data.expiresIn,
     },
-    { status: 200 }
+    { status: 200 },
   );
 }

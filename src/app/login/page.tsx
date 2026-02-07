@@ -20,6 +20,7 @@ import { Alert, AlertDescription } from "@/src/app/ui/alert";
 type AuthResponse = {
   localId?: string;
   idToken?: string;
+  refreshToken?: string;
   error?: string;
 };
 
@@ -59,6 +60,7 @@ export default function LoginPage() {
       }
 
       if (data.idToken) localStorage.setItem("auth_id_token", data.idToken);
+      if (data.refreshToken) localStorage.setItem("auth_refresh_token", data.refreshToken);
       localStorage.setItem("auth_local_id", data.localId);
 
       router.push("/questionnaire");

@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 
 export async function GET(request: Request) {
-  const projectId = process.env.FIREBASE_PROJECT_ID;
+  const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
   if (!projectId) {
     return NextResponse.json(
-      { error: "Server is missing FIREBASE_PROJECT_ID." },
-      { status: 500 }
+      { error: "Server is missing NEXT_PUBLIC_FIREBASE_PROJECT_ID." },
+      { status: 500 },
     );
   }
 
@@ -18,20 +18,23 @@ export async function GET(request: Request) {
   const authHeader = request.headers.get("authorization") ?? "";
   const tokenMatch = authHeader.match(/^Bearer (.+)$/i);
   if (!tokenMatch) {
-    return NextResponse.json({ error: "Missing Authorization Bearer token." }, { status: 401 });
+    return NextResponse.json(
+      { error: "Missing Authorization Bearer token." },
+      { status: 401 },
+    );
   }
 
   const idToken = tokenMatch[1];
   const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/users/${localId}`;
   const firestoreRes = await fetch(url, {
-    headers: { Authorization: `Bearer ${idToken}` }
+    headers: { Authorization: `Bearer ${idToken}` },
   });
 
   if (!firestoreRes.ok) {
     const firestoreError = await firestoreRes.json().catch(() => ({}));
     return NextResponse.json(
       { error: firestoreError?.error?.message ?? "Failed to load profile." },
-      { status: firestoreRes.status }
+      { status: firestoreRes.status },
     );
   }
 
@@ -47,6 +50,7 @@ export async function GET(request: Request) {
 
   return NextResponse.json({
     localId,
-    initialFootprintKg
+    initialFootprintKg,
   });
 }
+
