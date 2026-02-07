@@ -32,8 +32,67 @@ export default function HomePage() {
 
   function handleAuthFailure() {
     localStorage.removeItem("auth_id_token");
+    localStorage.removeItem("auth_refresh_token");
     localStorage.removeItem("auth_local_id");
     router.replace("/login");
+  }
+
+  async function refreshIdToken(): Promise<string | null> {
+    const refreshToken = localStorage.getItem("auth_refresh_token");
+    const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
+    if (!refreshToken || !apiKey) {
+      return null;
+    }
+
+    const body = new URLSearchParams({
+      grant_type: "refresh_token",
+      refresh_token: refreshToken
+    });
+
+    const res = await fetch(`https://securetoken.googleapis.com/v1/token?key=${apiKey}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body
+    });
+
+    if (!res.ok) {
+      return null;
+    }
+
+    const data = await res.json();
+    if (data.id_token) {
+      localStorage.setItem("auth_id_token", data.id_token);
+    }
+    if (data.refresh_token) {
+      localStorage.setItem("auth_refresh_token", data.refresh_token);
+    }
+    return data.id_token ?? null;
+  }
+
+  async function fetchWithAuth(input: RequestInfo, init: RequestInit = {}) {
+    const idToken = localStorage.getItem("auth_id_token");
+    if (!idToken) {
+      handleAuthFailure();
+      return null;
+    }
+
+    const headers = new Headers(init.headers);
+    headers.set("Authorization", `Bearer ${idToken}`);
+    const res = await fetch(input, { ...init, headers });
+
+    if (res.status !== 401) {
+      return res;
+    }
+
+    const refreshedToken = await refreshIdToken();
+    if (!refreshedToken) {
+      handleAuthFailure();
+      return null;
+    }
+
+    const retryHeaders = new Headers(init.headers);
+    retryHeaders.set("Authorization", `Bearer ${refreshedToken}`);
+    return await fetch(input, { ...init, headers: retryHeaders });
   }
 
   useEffect(() => {
@@ -46,13 +105,8 @@ export default function HomePage() {
     setLocalId(storedId);
 
     const loadProfile = async () => {
-      const res = await fetch(`/api/profile?localId=${encodeURIComponent(storedId)}`, {
-        headers: { Authorization: `Bearer ${idToken}` }
-      });
-      if (res.status === 401) {
-        handleAuthFailure();
-        return;
-      }
+      const res = await fetchWithAuth(`/api/profile?localId=${encodeURIComponent(storedId)}`);
+      if (!res) return;
       const data = await res.json();
       if (res.ok) {
         const footprint = typeof data.initialFootprintKg === "number" ? data.initialFootprintKg : null;
@@ -67,13 +121,8 @@ export default function HomePage() {
     const loadTasks = async () => {
       setLoadingTasks(true);
       setError(null);
-      const res = await fetch("/api/daily-tasks", {
-        headers: { Authorization: `Bearer ${idToken}` }
-      });
-      if (res.status === 401) {
-        handleAuthFailure();
-        return;
-      }
+      const res = await fetchWithAuth("/api/daily-tasks");
+      if (!res) return;
       const data = await res.json();
       if (!res.ok) {
         setError(data.error ?? "Failed to load daily tasks.");
@@ -146,19 +195,12 @@ export default function HomePage() {
       imageUrl = await getDownloadURL(storageRef);
     }
 
-    const res = await fetch("/api/complete-task", {
+    const res = await fetchWithAuth("/api/complete-task", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${idToken}`
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ dailyTaskId: taskId, imageUrl })
     });
-
-    if (res.status === 401) {
-      handleAuthFailure();
-      return;
-    }
+    if (!res) return;
     const data = await res.json();
     if (!res.ok) {
       setError(data.error ?? "Failed to complete task.");
@@ -176,6 +218,7 @@ export default function HomePage() {
   async function handleLogout() {
     await fetch("/api/logout", { method: "POST" });
     localStorage.removeItem("auth_id_token");
+    localStorage.removeItem("auth_refresh_token");
     localStorage.removeItem("auth_local_id");
     router.replace("/login");
   }

@@ -6,12 +6,15 @@ type AuthBody = {
 };
 
 export async function POST(request: Request) {
-  const apiKey = process.env.FIREBASE_API_KEY;
-  const projectId = process.env.FIREBASE_PROJECT_ID;
+  const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
+  const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
   if (!apiKey || !projectId) {
     return NextResponse.json(
-      { error: "Server is missing FIREBASE_API_KEY or FIREBASE_PROJECT_ID." },
-      { status: 500 }
+      {
+        error:
+          "Server is missing NEXT_PUBLIC_FIREBASE_API_KEY or NEXT_PUBLIC_FIREBASE_PROJECT_ID.",
+      },
+      { status: 500 },
     );
   }
 
@@ -28,7 +31,7 @@ export async function POST(request: Request) {
   if (!email || !password) {
     return NextResponse.json(
       { error: "Email and password are required." },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -43,7 +46,7 @@ export async function POST(request: Request) {
   if (!res.ok) {
     return NextResponse.json(
       { error: data?.error?.message ?? "Signup failed." },
-      { status: res.status }
+      { status: res.status },
     );
   }
 
@@ -58,9 +61,7 @@ export async function POST(request: Request) {
       carbonOffsetKgTotal: { integerValue: "0" },
       dailyTasks: { arrayValue: { values: [] } },
       completedTaskIds: { arrayValue: { values: [] } },
-      friends: { arrayValue: { values: [] } },
-      communities: { arrayValue: { values: [] } }
-    }
+    },
   };
 
   const firestoreRes = await fetch(
@@ -72,7 +73,7 @@ export async function POST(request: Request) {
         Authorization: `Bearer ${data.idToken}`,
       },
       body: JSON.stringify(userDoc),
-    }
+    },
   );
 
   if (!firestoreRes.ok) {
@@ -83,7 +84,7 @@ export async function POST(request: Request) {
           firestoreError?.error?.message ??
           "Failed to create user profile document.",
       },
-      { status: firestoreRes.status }
+      { status: firestoreRes.status },
     );
   }
 
@@ -95,6 +96,6 @@ export async function POST(request: Request) {
       refreshToken: data.refreshToken,
       expiresIn: data.expiresIn,
     },
-    { status: 200 }
+    { status: 200 },
   );
 }

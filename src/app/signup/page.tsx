@@ -6,6 +6,7 @@ import { useState } from "react";
 type AuthResponse = {
   localId?: string;
   idToken?: string;
+  refreshToken?: string;
   error?: string;
 };
 
@@ -36,6 +37,9 @@ export default function SignupPage() {
 
       if (data.idToken) {
         localStorage.setItem("auth_id_token", data.idToken);
+      }
+      if (data.refreshToken) {
+        localStorage.setItem("auth_refresh_token", data.refreshToken);
       }
       localStorage.setItem("auth_local_id", data.localId);
       router.push("/questionnaire");
