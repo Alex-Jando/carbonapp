@@ -70,13 +70,6 @@ export default function HomePage() {
               Secure • Private • Designed for sustainability
             </p>
           </Card>
-
-          <div className="mt-8 flex justify-center">
-            <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-1 text-xs text-zinc-400">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-              Eco-tech • Green theme • Motion UI
-            </span>
-          </div>
         </motion.section>
       </div>
     </main>
