@@ -26,6 +26,9 @@ export default function RootLayout({ children }: RootLayoutProps) {
               <a href="/home" className="hover:text-white">
                 Home
               </a>
+              <a href="/feed" className="hover:text-white">
+                Feed
+              </a>
               <a href="/social" className="hover:text-white">
                 Social
               </a>

@@ -13,6 +13,7 @@ import {
 } from "@/src/app/components/ui/card";
 import { Button } from "@/src/app/components/ui/button";
 import { Alert, AlertDescription } from "@/src/app/components/ui/alert";
+import { CompletedTaskList } from "@/src/components/feed/CompletedTaskList";
 
 type FriendProfile = {
   uid: string;
@@ -31,6 +32,7 @@ export default function FriendDetailPage() {
   const [profile, setProfile] = useState<FriendProfile | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [recentCompleted, setRecentCompleted] = useState<Array<Record<string, unknown>>>([]);
 
   function handleAuthFailure() {
     localStorage.removeItem("auth_id_token");
@@ -80,6 +82,17 @@ export default function FriendDetailPage() {
         initialFootprintKg: data.initialFootprintKg ?? null,
         carbonOffsetKgTotal: data.carbonOffsetKgTotal ?? 0,
       });
+
+      const completedRes = await fetch(
+        `/api/completed-tasks?uid=${encodeURIComponent(uid)}&limit=15`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      const completedData = await completedRes.json();
+      if (completedRes.ok) {
+        setRecentCompleted(
+          Array.isArray(completedData.items) ? completedData.items : [],
+        );
+      }
       setLoading(false);
     };
 
@@ -181,6 +194,18 @@ export default function FriendDetailPage() {
                         {profile.carbonOffsetKgTotal} kg
                       </p>
                       <p className="text-xs text-zinc-400">Total offset achieved</p>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                    <p className="text-sm font-semibold text-white">
+                      Recent Completed Tasks
+                    </p>
+                    <div className="mt-4">
+                      <CompletedTaskList
+                        tasks={recentCompleted as any}
+                        emptyLabel="No completed tasks yet."
+                      />
                     </div>
                   </div>
                 </div>

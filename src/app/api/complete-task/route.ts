@@ -108,7 +108,9 @@ export async function POST(request: Request) {
   const uid = decoded.uid;
   const adminDb = getAdminDb();
   const userRef = adminDb.collection("users").doc(uid);
-  const tasksRef = adminDb.collection("tasks");
+  const completedTasksRef = adminDb.collection("completedTasks");
+  const globalDailyStatsRef = adminDb.collection("globalDailyStats");
+  const globalTotalsRef = adminDb.collection("globalMeta").doc("totals");
 
   let completedTaskId = "";
   let carbonOffsetKg = 0;
@@ -148,7 +150,7 @@ export async function POST(request: Request) {
       const dateKey = String(taskData.dateKey || getTorontoDateKey());
       const yesterdayKey = getTorontoDateKeyOffset(-1);
 
-      const completedRef = tasksRef.doc(dailyTaskId);
+      const completedRef = completedTasksRef.doc();
       completedTaskId = completedRef.id;
 
       const currentCarbonOffsetTotal =
@@ -194,6 +196,47 @@ export async function POST(request: Request) {
         carbonOffsetKg: newDailyCarbonOffset,
       };
 
+      const communityId =
+        Array.isArray(userData.communities) && userData.communities.length > 0
+          ? String(userData.communities[0])
+          : null;
+      let communityName: string | null = null;
+      if (communityId) {
+        const communitySnap = await transaction.get(
+          adminDb.collection("communities").doc(communityId),
+        );
+        if (communitySnap.exists) {
+          const communityData = communitySnap.data() ?? {};
+          communityName =
+            typeof communityData.name === "string" ? communityData.name : null;
+        }
+      }
+
+      const completedPayload = {
+        uid,
+        username: String(userData.username ?? ""),
+        userEmail: typeof userData.email === "string" ? userData.email : null,
+        communityId,
+        communityName,
+        title: taskData.title ?? "Untitled task",
+        carbonOffsetKg,
+        imageUrl: imageUrl ?? null,
+        dateKey,
+        completedAt: getFieldValue().serverTimestamp(),
+        sourceDailyTaskId: dailyTaskId,
+      };
+
+      const userCompletedRef = userRef
+        .collection("completedTasks")
+        .doc(completedTaskId);
+      const communityCompletedRef = communityId
+        ? adminDb
+            .collection("communities")
+            .doc(communityId)
+            .collection("completedTasks")
+            .doc(completedTaskId)
+        : null;
+
       transaction.set(
         dailyStatsRef,
         {
@@ -205,15 +248,33 @@ export async function POST(request: Request) {
         { merge: true },
       );
 
-      transaction.set(completedRef, {
-        uid,
-        title: taskData.title ?? "Untitled task",
-        carbonOffsetKg,
-        imageUrl: imageUrl ?? null,
-        dateKey,
-        completedAt: getFieldValue().serverTimestamp(),
-        sourceDailyTaskId: dailyTaskId,
-      });
+      const globalDailyRef = globalDailyStatsRef.doc(dateKey);
+      transaction.set(
+        globalDailyRef,
+        {
+          dateKey,
+          tasksCompleted: getFieldValue().increment(1),
+          carbonOffsetKg: getFieldValue().increment(carbonOffsetKg),
+          updatedAt: getFieldValue().serverTimestamp(),
+        },
+        { merge: true },
+      );
+
+      transaction.set(
+        globalTotalsRef,
+        {
+          tasksCompleted: getFieldValue().increment(1),
+          carbonOffsetKg: getFieldValue().increment(carbonOffsetKg),
+          updatedAt: getFieldValue().serverTimestamp(),
+        },
+        { merge: true },
+      );
+
+      transaction.set(completedRef, completedPayload);
+      transaction.set(userCompletedRef, completedPayload);
+      if (communityCompletedRef) {
+        transaction.set(communityCompletedRef, completedPayload);
+      }
 
       transaction.set(
         userRef,

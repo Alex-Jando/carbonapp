@@ -12,6 +12,7 @@ import {
 } from "@/src/app/components/ui/card";
 import { Button } from "@/src/app/components/ui/button";
 import { Alert, AlertDescription } from "@/src/app/components/ui/alert";
+import { CompletedTaskList } from "@/src/components/feed/CompletedTaskList";
 
 type Member = {
   uid: string;
@@ -29,6 +30,7 @@ export default function CommunityDetailPage() {
   const [members, setMembers] = useState<Member[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [recentCompleted, setRecentCompleted] = useState<Array<Record<string, unknown>>>([]);
 
   function handleAuthFailure() {
     localStorage.removeItem("auth_id_token");
@@ -80,6 +82,16 @@ export default function CommunityDetailPage() {
         }
       }
       setMembers(memberResults);
+      const completedRes = await fetch(
+        `/api/completed-tasks?communityId=${encodeURIComponent(communityId)}&limit=15`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      const completedData = await completedRes.json();
+      if (completedRes.ok) {
+        setRecentCompleted(
+          Array.isArray(completedData.items) ? completedData.items : [],
+        );
+      }
       setLoading(false);
     };
 
@@ -205,6 +217,20 @@ export default function CommunityDetailPage() {
                         </div>
                       </div>
                     ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {!loading ? (
+                <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                  <p className="text-sm font-semibold text-white">
+                    Recent Completed Tasks
+                  </p>
+                  <div className="mt-4">
+                    <CompletedTaskList
+                      tasks={recentCompleted as any}
+                      emptyLabel="No completed tasks yet."
+                    />
                   </div>
                 </div>
               ) : null}

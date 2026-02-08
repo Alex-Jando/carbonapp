@@ -8,6 +8,7 @@ import { getStorage } from "firebase/storage";
 import { WelcomeHeader } from "@/src/components/home/WelcomeHeader";
 import { DailyTasksCard } from "@/src/components/home/DailyTasksCard";
 import { StatsOverview } from "@/src/components/home/StatsOverview";
+import { CompletedTaskList } from "@/src/components/feed/CompletedTaskList";
 
 function getFirebaseStorage() {
   const firebaseConfig = {
@@ -42,6 +43,7 @@ export default function HomePage() {
   const [dailyStats, setDailyStats] = useState<
     Array<{ dateKey: string; tasksCompleted: number; carbonOffsetKg: number }>
   >([]);
+  const [recentCompleted, setRecentCompleted] = useState<Array<Record<string, unknown>>>([]);
 
   function handleAuthFailure() {
     localStorage.removeItem("auth_id_token");
@@ -162,7 +164,18 @@ export default function HomePage() {
       setStatsLoading(false);
     };
 
-    void loadProfile().then(() => loadTasks()).then(() => loadStats());
+    const loadRecent = async () => {
+      const res = await fetchWithAuth(
+        `/api/completed-tasks?uid=${encodeURIComponent(storedId)}&limit=15`,
+      );
+      if (!res) return;
+      const data = await res.json();
+      if (res.ok) {
+        setRecentCompleted(Array.isArray(data.items) ? data.items : []);
+      }
+    };
+
+    void loadProfile().then(() => loadTasks()).then(() => loadStats()).then(() => loadRecent());
   }, [router]);
 
   const remainingTasks = useMemo(() => tasks.length, [tasks.length]);
@@ -363,6 +376,16 @@ export default function HomePage() {
           carbonOffsetKgTotal={carbonOffsetKgTotal}
           dailyStats={dailyStats}
         />
+
+        <section className="rounded-3xl border border-white/10 bg-white/[0.04] p-6 shadow-[0_18px_60px_rgba(0,0,0,0.35)]">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-semibold text-white">Recent Completed</h2>
+            <span className="text-xs text-zinc-400">Last 15</span>
+          </div>
+          <div className="mt-6">
+            <CompletedTaskList tasks={recentCompleted as any} emptyLabel="No completed tasks yet." />
+          </div>
+        </section>
       </div>
     </main>
   );
