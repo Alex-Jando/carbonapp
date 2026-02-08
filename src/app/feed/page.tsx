@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { GlobalStats } from "@/src/components/feed/GlobalStats";
 import { CompletedTaskList } from "@/src/components/feed/CompletedTaskList";
+import { LeaderboardCard } from "@/src/components/feed/LeaderboardCard";
 
 type CompletedTask = {
   id: string;
@@ -21,15 +22,29 @@ type DailyStat = {
   carbonOffsetKg: number;
 };
 
+type LeaderboardEntry = {
+  rank: number;
+  uid: string;
+  username: string;
+  city?: string;
+  carbonOffsetKgTotal: number;
+  tasksCompletedCount: number;
+};
+
+type LeaderboardLimit = 5 | 10 | 50 | 100;
+
 export default function FeedPage() {
   const [tasks, setTasks] = useState<CompletedTask[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [loadingLeaderboard, setLoadingLeaderboard] = useState(true);
+  const [leaderboardLimit, setLeaderboardLimit] = useState<LeaderboardLimit>(10);
   const [stats, setStats] = useState<{ totals: { tasksCompleted: number; carbonOffsetKg: number }; dailyStats: DailyStat[] }>({
     totals: { tasksCompleted: 0, carbonOffsetKg: 0 },
     dailyStats: []
   });
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
 
   async function loadFeed(cursor?: string | null) {
     const params = new URLSearchParams();
@@ -51,10 +66,23 @@ export default function FeedPage() {
     }
   }
 
+  async function loadLeaderboard(limit: LeaderboardLimit) {
+    const res = await fetch(`/api/leaderboard?limit=${limit}`);
+    const data = await res.json();
+    if (res.ok) {
+      setLeaderboard(Array.isArray(data.items) ? data.items : []);
+    }
+  }
+
   useEffect(() => {
     setLoading(true);
     void loadFeed().finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    setLoadingLeaderboard(true);
+    void loadLeaderboard(leaderboardLimit).finally(() => setLoadingLeaderboard(false));
+  }, [leaderboardLimit]);
 
   return (
     <main className="relative min-h-dvh bg-zinc-950 text-zinc-50">
@@ -77,6 +105,13 @@ export default function FeedPage() {
         </motion.div>
 
         <GlobalStats totals={stats.totals} dailyStats={stats.dailyStats} />
+
+        <LeaderboardCard
+          entries={leaderboard}
+          loading={loadingLeaderboard}
+          selectedLimit={leaderboardLimit}
+          onSelectLimit={setLeaderboardLimit}
+        />
 
         <section className="rounded-3xl border border-white/10 bg-white/[0.04] p-6">
           <div className="flex items-center justify-between">
