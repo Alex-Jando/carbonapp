@@ -1,19 +1,42 @@
 import { NextResponse } from "next/server";
 import admin from "firebase-admin";
-import { readFileSync } from "fs";
 
 export const runtime = "nodejs";
 
 function resolveServiceAccount() {
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
   if (!raw) return null;
-  const trimmed = raw.trim();
-  if (trimmed.startsWith("{")) {
-    return JSON.parse(trimmed);
-  }
+
+  const unwrap = (value: string) => {
+    const trimmed = value.trim();
+    if ((trimmed.startsWith("'") && trimmed.endsWith("'")) ||
+        (trimmed.startsWith("\"") && trimmed.endsWith("\""))) {
+      return trimmed.slice(1, -1);
+    }
+    return trimmed;
+  };
+
+  const parseJson = (value: string) => {
+    const parsed = JSON.parse(value);
+    if (parsed && typeof parsed.private_key === "string") {
+      parsed.private_key = parsed.private_key.replace(/\\n/g, "\n");
+    }
+    return parsed;
+  };
+
+  const unwrapped = unwrap(raw);
+
   try {
-    const fileContent = readFileSync(trimmed, "utf-8");
-    return JSON.parse(fileContent);
+    if (unwrapped.startsWith("{")) {
+      return parseJson(unwrapped);
+    }
+  } catch {
+    // ignore and try base64
+  }
+
+  try {
+    const decoded = Buffer.from(unwrapped, "base64").toString("utf-8");
+    return parseJson(decoded);
   } catch {
     return null;
   }
@@ -22,13 +45,23 @@ function resolveServiceAccount() {
 function getAdminApp() {
   if (!admin.apps.length) {
     const serviceAccount = resolveServiceAccount();
+    const projectId =
+      serviceAccount?.project_id ??
+      process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ??
+      process.env.FIREBASE_PROJECT_ID;
     if (serviceAccount) {
       admin.initializeApp({
         credential: admin.credential.cert(serviceAccount),
+        projectId
+      });
+    } else if (projectId) {
+      admin.initializeApp({
+        credential: admin.credential.applicationDefault(),
+        projectId
       });
     } else {
       admin.initializeApp({
-        credential: admin.credential.applicationDefault(),
+        credential: admin.credential.applicationDefault()
       });
     }
   }
@@ -52,13 +85,19 @@ function getBearerToken(request: Request): string | null {
 export async function GET(request: Request) {
   const token = getBearerToken(request);
   if (!token) {
-    return NextResponse.json({ error: "Missing Authorization Bearer token." }, { status: 401 });
+    return NextResponse.json(
+      { error: "Missing Authorization Bearer token." },
+      { status: 401 },
+    );
   }
 
   try {
     await getAdminAuth().verifyIdToken(token);
   } catch {
-    return NextResponse.json({ error: "Invalid or expired token." }, { status: 401 });
+    return NextResponse.json(
+      { error: "Invalid or expired token." },
+      { status: 401 },
+    );
   }
 
   const { searchParams } = new URL(request.url);
@@ -110,12 +149,17 @@ export async function GET(request: Request) {
       : [];
     items = await fetchTasksByIds(completedTaskIds);
   } else if (communityId) {
-    const communitySnap = await adminDb.collection("communities").doc(communityId).get();
+    const communitySnap = await adminDb
+      .collection("communities")
+      .doc(communityId)
+      .get();
     const memberIds = Array.isArray(communitySnap.data()?.members)
       ? (communitySnap.data()?.members as string[])
       : [];
     if (memberIds.length) {
-      const memberRefs = memberIds.map((id) => adminDb.collection("users").doc(id));
+      const memberRefs = memberIds.map((id) =>
+        adminDb.collection("users").doc(id),
+      );
       const memberSnaps = await adminDb.getAll(...memberRefs);
       const allTaskIds = new Set<string>();
       for (const memberSnap of memberSnaps) {

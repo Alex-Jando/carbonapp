@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import admin from "firebase-admin";
-import { readFileSync } from "fs";
 import { completeTaskRequestSchema } from "../../../schema";
 
 export const runtime = "nodejs";
@@ -24,13 +23,37 @@ function getTorontoDateKeyOffset(days: number): string {
 function resolveServiceAccount() {
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
   if (!raw) return null;
-  const trimmed = raw.trim();
-  if (trimmed.startsWith("{")) {
-    return JSON.parse(trimmed);
-  }
+
+  const unwrap = (value: string) => {
+    const trimmed = value.trim();
+    if ((trimmed.startsWith("'") && trimmed.endsWith("'")) ||
+        (trimmed.startsWith("\"") && trimmed.endsWith("\""))) {
+      return trimmed.slice(1, -1);
+    }
+    return trimmed;
+  };
+
+  const parseJson = (value: string) => {
+    const parsed = JSON.parse(value);
+    if (parsed && typeof parsed.private_key === "string") {
+      parsed.private_key = parsed.private_key.replace(/\\n/g, "\n");
+    }
+    return parsed;
+  };
+
+  const unwrapped = unwrap(raw);
+
   try {
-    const fileContent = readFileSync(trimmed, "utf-8");
-    return JSON.parse(fileContent);
+    if (unwrapped.startsWith("{")) {
+      return parseJson(unwrapped);
+    }
+  } catch {
+    // ignore and try base64
+  }
+
+  try {
+    const decoded = Buffer.from(unwrapped, "base64").toString("utf-8");
+    return parseJson(decoded);
   } catch {
     return null;
   }
@@ -39,13 +62,23 @@ function resolveServiceAccount() {
 function getAdminApp() {
   if (!admin.apps.length) {
     const serviceAccount = resolveServiceAccount();
+    const projectId =
+      serviceAccount?.project_id ??
+      process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ??
+      process.env.FIREBASE_PROJECT_ID;
     if (serviceAccount) {
       admin.initializeApp({
         credential: admin.credential.cert(serviceAccount),
+        projectId
+      });
+    } else if (projectId) {
+      admin.initializeApp({
+        credential: admin.credential.applicationDefault(),
+        projectId
       });
     } else {
       admin.initializeApp({
-        credential: admin.credential.applicationDefault(),
+        credential: admin.credential.applicationDefault()
       });
     }
   }
@@ -143,11 +176,14 @@ export async function POST(request: Request) {
           const rawDailyTasks = Array.isArray(userData.dailyTasks)
             ? userData.dailyTasks
             : [];
-          const dailyTasks: Array<Record<string, unknown>> = rawDailyTasks.filter(
-            (task) => task && typeof task === "object" && "id" in task,
-          ) as Array<Record<string, unknown>>;
+          const dailyTasks: Array<Record<string, unknown>> =
+            rawDailyTasks.filter(
+              (task) => task && typeof task === "object" && "id" in task,
+            ) as Array<Record<string, unknown>>;
 
-          const taskIndex = dailyTasks.findIndex((task) => task.id === dailyTaskId);
+          const taskIndex = dailyTasks.findIndex(
+            (task) => task.id === dailyTaskId,
+          );
           if (taskIndex === -1) {
             throw new Error("DAILY_TASK_NOT_FOUND");
           }
@@ -179,7 +215,9 @@ export async function POST(request: Request) {
           nextLastCompletionDateKey = dateKey;
 
           nextTasksCompletedCount = currentTasksCompletedCount + 1;
-          nextCarbonOffsetTotal = round1(currentCarbonOffsetTotal + carbonOffsetKg);
+          nextCarbonOffsetTotal = round1(
+            currentCarbonOffsetTotal + carbonOffsetKg,
+          );
 
           const updatedDailyTasks = dailyTasks.filter(
             (task) => task.id !== dailyTaskId,
@@ -195,7 +233,9 @@ export async function POST(request: Request) {
           const currentDailyCarbonOffset =
             Number(dailyStatsData.carbonOffsetKg) || 0;
           const newDailyTasksCompleted = currentDailyTasksCompleted + 1;
-          const newDailyCarbonOffset = round1(currentDailyCarbonOffset + carbonOffsetKg);
+          const newDailyCarbonOffset = round1(
+            currentDailyCarbonOffset + carbonOffsetKg,
+          );
 
           nextDailyStats = {
             dateKey,
@@ -206,7 +246,8 @@ export async function POST(request: Request) {
           const completedPayload = {
             uid,
             username: String(userData.username ?? ""),
-            userEmail: typeof userData.email === "string" ? userData.email : null,
+            userEmail:
+              typeof userData.email === "string" ? userData.email : null,
             title: taskData.title ?? "Untitled task",
             carbonOffsetKg,
             imageUrl: imageUrl ?? null,
@@ -286,7 +327,9 @@ export async function POST(request: Request) {
         if (!retryable || attempt === retries) {
           throw error;
         }
-        await new Promise((resolve) => setTimeout(resolve, 150 * (attempt + 1)));
+        await new Promise((resolve) =>
+          setTimeout(resolve, 150 * (attempt + 1)),
+        );
       }
     }
     throw lastError;

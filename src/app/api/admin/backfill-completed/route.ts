@@ -1,19 +1,42 @@
 import { NextResponse } from "next/server";
 import admin from "firebase-admin";
-import { readFileSync } from "fs";
 
 export const runtime = "nodejs";
 
 function resolveServiceAccount() {
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
   if (!raw) return null;
-  const trimmed = raw.trim();
-  if (trimmed.startsWith("{")) {
-    return JSON.parse(trimmed);
-  }
+
+  const unwrap = (value: string) => {
+    const trimmed = value.trim();
+    if ((trimmed.startsWith("'") && trimmed.endsWith("'")) ||
+        (trimmed.startsWith("\"") && trimmed.endsWith("\""))) {
+      return trimmed.slice(1, -1);
+    }
+    return trimmed;
+  };
+
+  const parseJson = (value: string) => {
+    const parsed = JSON.parse(value);
+    if (parsed && typeof parsed.private_key === "string") {
+      parsed.private_key = parsed.private_key.replace(/\\n/g, "\n");
+    }
+    return parsed;
+  };
+
+  const unwrapped = unwrap(raw);
+
   try {
-    const fileContent = readFileSync(trimmed, "utf-8");
-    return JSON.parse(fileContent);
+    if (unwrapped.startsWith("{")) {
+      return parseJson(unwrapped);
+    }
+  } catch {
+    // ignore and try base64
+  }
+
+  try {
+    const decoded = Buffer.from(unwrapped, "base64").toString("utf-8");
+    return parseJson(decoded);
   } catch {
     return null;
   }
@@ -22,13 +45,23 @@ function resolveServiceAccount() {
 function getAdminApp() {
   if (!admin.apps.length) {
     const serviceAccount = resolveServiceAccount();
+    const projectId =
+      serviceAccount?.project_id ??
+      process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ??
+      process.env.FIREBASE_PROJECT_ID;
     if (serviceAccount) {
       admin.initializeApp({
         credential: admin.credential.cert(serviceAccount),
+        projectId
+      });
+    } else if (projectId) {
+      admin.initializeApp({
+        credential: admin.credential.applicationDefault(),
+        projectId
       });
     } else {
       admin.initializeApp({
-        credential: admin.credential.applicationDefault(),
+        credential: admin.credential.applicationDefault()
       });
     }
   }
@@ -51,9 +84,15 @@ export async function POST(request: Request) {
   const startAfterId = searchParams.get("cursor");
 
   const adminDb = getAdminDb();
-  let query = adminDb.collection("completedTasks").orderBy("__name__").limit(limit);
+  let query = adminDb
+    .collection("completedTasks")
+    .orderBy("__name__")
+    .limit(limit);
   if (startAfterId) {
-    const startDoc = await adminDb.collection("completedTasks").doc(startAfterId).get();
+    const startDoc = await adminDb
+      .collection("completedTasks")
+      .doc(startAfterId)
+      .get();
     if (startDoc.exists) {
       query = query.startAfter(startDoc);
     }
@@ -100,8 +139,8 @@ export async function POST(request: Request) {
       scanned: snapshot.size,
       writes,
       nextCursor,
-      done: snapshot.size < limit
+      done: snapshot.size < limit,
     },
-    { status: 200 }
+    { status: 200 },
   );
 }

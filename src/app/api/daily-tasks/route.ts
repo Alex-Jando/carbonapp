@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import admin from "firebase-admin";
-import { readFileSync } from "fs";
 import { generateDailyTasks } from "../../../ai";
 
 export const runtime = "nodejs";
@@ -24,7 +23,7 @@ function getTorontoDateKey(date = new Date()): string {
     timeZone: "America/Toronto",
     year: "numeric",
     month: "2-digit",
-    day: "2-digit"
+    day: "2-digit",
   });
   return formatter.format(date);
 }
@@ -32,13 +31,37 @@ function getTorontoDateKey(date = new Date()): string {
 function resolveServiceAccount() {
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
   if (!raw) return null;
-  const trimmed = raw.trim();
-  if (trimmed.startsWith("{")) {
-    return JSON.parse(trimmed);
-  }
+
+  const unwrap = (value: string) => {
+    const trimmed = value.trim();
+    if ((trimmed.startsWith("'") && trimmed.endsWith("'")) ||
+        (trimmed.startsWith("\"") && trimmed.endsWith("\""))) {
+      return trimmed.slice(1, -1);
+    }
+    return trimmed;
+  };
+
+  const parseJson = (value: string) => {
+    const parsed = JSON.parse(value);
+    if (parsed && typeof parsed.private_key === "string") {
+      parsed.private_key = parsed.private_key.replace(/\\n/g, "\n");
+    }
+    return parsed;
+  };
+
+  const unwrapped = unwrap(raw);
+
   try {
-    const fileContent = readFileSync(trimmed, "utf-8");
-    return JSON.parse(fileContent);
+    if (unwrapped.startsWith("{")) {
+      return parseJson(unwrapped);
+    }
+  } catch {
+    // ignore and try base64
+  }
+
+  try {
+    const decoded = Buffer.from(unwrapped, "base64").toString("utf-8");
+    return parseJson(decoded);
   } catch {
     return null;
   }
@@ -47,9 +70,19 @@ function resolveServiceAccount() {
 function getAdminApp() {
   if (!admin.apps.length) {
     const serviceAccount = resolveServiceAccount();
+    const projectId =
+      serviceAccount?.project_id ??
+      process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ??
+      process.env.FIREBASE_PROJECT_ID;
     if (serviceAccount) {
       admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount)
+        credential: admin.credential.cert(serviceAccount),
+        projectId
+      });
+    } else if (projectId) {
+      admin.initializeApp({
+        credential: admin.credential.applicationDefault(),
+        projectId
       });
     } else {
       admin.initializeApp({
@@ -81,14 +114,20 @@ function getBearerToken(request: Request): string | null {
 export async function GET(request: Request) {
   const token = getBearerToken(request);
   if (!token) {
-    return NextResponse.json({ error: "Missing Authorization Bearer token." }, { status: 401 });
+    return NextResponse.json(
+      { error: "Missing Authorization Bearer token." },
+      { status: 401 },
+    );
   }
 
   let decoded;
   try {
     decoded = await getAdminAuth().verifyIdToken(token);
   } catch {
-    return NextResponse.json({ error: "Invalid or expired token." }, { status: 401 });
+    return NextResponse.json(
+      { error: "Invalid or expired token." },
+      { status: 401 },
+    );
   }
 
   const uid = decoded.uid;
@@ -97,7 +136,7 @@ export async function GET(request: Request) {
   const adminDb = getAdminDb();
   const userRef = adminDb.collection("users").doc(uid);
   const userSnap = await userRef.get();
-  const userData = userSnap.exists ? userSnap.data() ?? {} : {};
+  const userData = userSnap.exists ? (userSnap.data() ?? {}) : {};
 
   const needsDefaults =
     userData.tasksCompletedCount === undefined ||
@@ -117,19 +156,26 @@ export async function GET(request: Request) {
         lastCompletionDateKey: userData.lastCompletionDateKey ?? null,
         carbonOffsetKgTotal: userData.carbonOffsetKgTotal ?? 0,
         friends: Array.isArray(userData.friends) ? userData.friends : [],
-        communities: Array.isArray(userData.communities) ? userData.communities : [],
-        updatedAt: getFieldValue().serverTimestamp()
+        communities: Array.isArray(userData.communities)
+          ? userData.communities
+          : [],
+        updatedAt: getFieldValue().serverTimestamp(),
       },
-      { merge: true }
+      { merge: true },
     );
   }
 
   const dailyTasksMeta = userData.dailyTasksMeta ?? null;
   const metaDateKey = dailyTasksMeta?.dateKey ?? null;
-  const storedDailyTasks = Array.isArray(userData.dailyTasks) ? userData.dailyTasks : [];
+  const storedDailyTasks = Array.isArray(userData.dailyTasks)
+    ? userData.dailyTasks
+    : [];
 
   if (metaDateKey === dateKey) {
-    return NextResponse.json({ dateKey, tasks: storedDailyTasks }, { status: 200 });
+    return NextResponse.json(
+      { dateKey, tasks: storedDailyTasks },
+      { status: 200 },
+    );
   }
 
   const generated = await generateDailyTasks({
@@ -140,12 +186,15 @@ export async function GET(request: Request) {
       city: userData.city,
       initialFootprintKg: userData.initialFootprintKg ?? null,
       carbonOffsetKgTotal: userData.carbonOffsetKgTotal ?? 0,
-      questionnaireCompression: userData.questionnaireCompression ?? null
-    }
+      questionnaireCompression: userData.questionnaireCompression ?? null,
+    },
   });
 
   if (!generated) {
-    return NextResponse.json({ error: "Failed to generate daily tasks." }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to generate daily tasks." },
+      { status: 500 },
+    );
   }
 
   const tasks: DailyTaskDoc[] = [];
@@ -159,7 +208,7 @@ export async function GET(request: Request) {
       difficulty: task.difficulty,
       reason: task.reason,
       dateKey,
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
     });
   }
 
@@ -171,10 +220,10 @@ export async function GET(request: Request) {
     carbonOffsetKgTotal: userData.carbonOffsetKgTotal ?? 0,
     dailyTasksMeta: {
       dateKey,
-      generatedAt: getFieldValue().serverTimestamp()
+      generatedAt: getFieldValue().serverTimestamp(),
     },
     dailyTasks: tasks,
-    updatedAt: getFieldValue().serverTimestamp()
+    updatedAt: getFieldValue().serverTimestamp(),
   };
 
   await userRef.set(userUpdate, { merge: true });
