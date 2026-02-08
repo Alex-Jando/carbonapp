@@ -58,6 +58,14 @@ export default function SignupPage() {
     city.trim().length > 0 &&
     !loading;
 
+  React.useEffect(() => {
+    const idToken = localStorage.getItem("auth_id_token");
+    const localId = localStorage.getItem("auth_local_id");
+    if (idToken && localId) {
+      router.replace("/home");
+    }
+  }, [router]);
+
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);

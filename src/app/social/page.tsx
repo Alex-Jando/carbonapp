@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 
@@ -22,6 +22,12 @@ type CommunitySummary = {
   membersCount: number;
 };
 
+type FriendSummary = {
+  uid: string;
+  username: string;
+  email: string;
+};
+
 export default function SocialPage() {
   const router = useRouter();
 
@@ -29,6 +35,8 @@ export default function SocialPage() {
   const [communityName, setCommunityName] = useState("");
   const [joinCommunityId, setJoinCommunityId] = useState("");
   const [communities, setCommunities] = useState<CommunitySummary[]>([]);
+  const [myCommunityIds, setMyCommunityIds] = useState<string[]>([]);
+  const [friends, setFriends] = useState<FriendSummary[]>([]);
   const [status, setStatus] = useState<string | null>(null);
 
   function handleAuthFailure() {
@@ -43,6 +51,40 @@ export default function SocialPage() {
       router.replace("/login");
       return;
     }
+
+    const loadMe = async () => {
+      const meRes = await fetch("/api/social/me", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (meRes.status === 401) {
+        handleAuthFailure();
+        return;
+      }
+      const meData = await meRes.json();
+      if (meRes.ok) {
+        setMyCommunityIds(Array.isArray(meData.communities) ? meData.communities : []);
+        const friendIds = Array.isArray(meData.friends) ? meData.friends : [];
+        const friendResults: FriendSummary[] = [];
+        for (const id of friendIds) {
+          const res = await fetch(`/api/social/user?uid=${encodeURIComponent(id)}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (res.status === 401) {
+            handleAuthFailure();
+            return;
+          }
+          const data = await res.json();
+          if (res.ok) {
+            friendResults.push({
+              uid: data.uid,
+              username: data.username ?? "",
+              email: data.email ?? "",
+            });
+          }
+        }
+        setFriends(friendResults);
+      }
+    };
 
     const loadCommunities = async () => {
       const res = await fetch("/api/social/all-communities", {
@@ -60,7 +102,7 @@ export default function SocialPage() {
       }
     };
 
-    void loadCommunities();
+    void loadMe().then(() => loadCommunities());
   }, [router]);
 
   async function postJson(url: string, body: Record<string, unknown>) {
@@ -98,7 +140,34 @@ export default function SocialPage() {
     e.preventDefault();
     setStatus(null);
     const data = await postJson("/api/social/add-friend", { email });
-    if (data) setEmail("");
+    if (data) {
+      setEmail("");
+      const token = localStorage.getItem("auth_id_token");
+      if (token) {
+        const meRes = await fetch("/api/social/me", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const meData = await meRes.json();
+        if (meRes.ok) {
+          const ids = Array.isArray(meData.friends) ? meData.friends : [];
+          const results: FriendSummary[] = [];
+          for (const id of ids) {
+            const res = await fetch(`/api/social/user?uid=${encodeURIComponent(id)}`, {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            const userData = await res.json();
+            if (res.ok) {
+              results.push({
+                uid: userData.uid,
+                username: userData.username ?? "",
+                email: userData.email ?? "",
+              });
+            }
+          }
+          setFriends(results);
+        }
+      }
+    }
   }
 
   async function handleCreateCommunity(e: React.FormEvent<HTMLFormElement>) {
@@ -137,6 +206,11 @@ export default function SocialPage() {
     setStatus(null);
     await postJson("/api/social/join-community", { communityId: id });
   }
+
+  const myCommunities = useMemo(
+    () => communities.filter((c) => myCommunityIds.includes(c.id)),
+    [communities, myCommunityIds],
+  );
 
   return (
     <main className="relative min-h-dvh bg-zinc-950 text-zinc-50">
@@ -212,7 +286,114 @@ export default function SocialPage() {
           </Card>
         </div>
 
-        {/* Join Community */}
+        <div className="mt-6 grid gap-6 md:grid-cols-2">
+          <Card className="border-white/10 bg-white/[0.06] backdrop-blur">
+            <CardHeader>
+              <CardTitle className="text-white">My Communities</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {myCommunities.length === 0 ? (
+                <p className="text-sm text-zinc-400">No communities joined yet.</p>
+              ) : (
+                myCommunities.map((c) => (
+                  <div
+                    key={c.id}
+                    className="flex items-center justify-between rounded-xl border border-white/10 bg-black/30 px-4 py-3"
+                  >
+                    <div>
+                      <p className="font-medium text-white">{c.name}</p>
+                      <Badge className="mt-1 bg-white/10 text-zinc-200">
+                        {c.membersCount} members
+                      </Badge>
+                    </div>
+                    <a
+                      href={`/community/${c.id}`}
+                      className="text-xs text-emerald-200 hover:underline"
+                    >
+                      View
+                    </a>
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="border-white/10 bg-white/[0.06] backdrop-blur">
+            <CardHeader>
+              <CardTitle className="text-white">Friends</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {friends.length === 0 ? (
+                <p className="text-sm text-zinc-400">No friends yet.</p>
+              ) : (
+                friends.map((friend) => (
+                  <a
+                    key={friend.uid}
+                    href={`/friend/${friend.uid}`}
+                    className="flex items-center justify-between rounded-xl border border-white/10 bg-black/30 px-4 py-3"
+                  >
+                    <div>
+                      <p className="font-medium text-white">
+                        {friend.username || friend.email || friend.uid}
+                      </p>
+                      <p className="text-xs text-zinc-400">{friend.email}</p>
+                    </div>
+                    <span className="text-xs text-emerald-200">View</span>
+                  </a>
+                ))
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        <Card className="mt-6 border-white/10 bg-white/[0.06] backdrop-blur">
+          <CardHeader>
+            <CardTitle className="text-white">All Communities</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {communities.length === 0 ? (
+              <p className="text-sm text-zinc-400">No communities yet.</p>
+            ) : (
+                communities.map((c) => {
+                  const isMember = myCommunityIds.includes(c.id);
+                  return (
+                  <div
+                    key={c.id}
+                    className="flex items-center justify-between rounded-xl border border-white/10 bg-black/30 px-4 py-3"
+                  >
+                    <div>
+                      <p className="font-medium text-white">{c.name}</p>
+                      <Badge className="mt-1 bg-white/10 text-zinc-200">
+                        {c.membersCount} members
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <a
+                        href={`/community/${c.id}`}
+                        className="text-xs text-emerald-200 hover:underline"
+                      >
+                        View
+                      </a>
+                      {isMember ? (
+                        <span className="rounded-full border border-white/10 px-3 py-1 text-xs text-zinc-400">
+                          Joined
+                        </span>
+                      ) : (
+                        <Button
+                          size="sm"
+                          onClick={() => handleJoinCommunityByList(c.id)}
+                          className="bg-emerald-500 text-white hover:bg-emerald-400"
+                        >
+                          Join
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                )})
+              )}
+          </CardContent>
+        </Card>
+
         <Card className="mt-6 border-white/10 bg-white/[0.06] backdrop-blur">
           <CardHeader>
             <CardTitle className="text-white">Join Community by ID</CardTitle>
@@ -233,39 +414,6 @@ export default function SocialPage() {
                 Join
               </Button>
             </form>
-          </CardContent>
-        </Card>
-
-        {/* Communities list */}
-        <Card className="mt-6 border-white/10 bg-white/[0.06] backdrop-blur">
-          <CardHeader>
-            <CardTitle className="text-white">All Communities</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {communities.length === 0 ? (
-              <p className="text-sm text-zinc-400">No communities yet.</p>
-            ) : (
-              communities.map((c) => (
-                <div
-                  key={c.id}
-                  className="flex items-center justify-between rounded-xl border border-white/10 bg-black/30 px-4 py-3"
-                >
-                  <div>
-                    <p className="font-medium text-white">{c.name}</p>
-                    <Badge className="mt-1 bg-white/10 text-zinc-200">
-                      {c.membersCount} members
-                    </Badge>
-                  </div>
-                  <Button
-                    size="sm"
-                    onClick={() => handleJoinCommunityByList(c.id)}
-                    className="bg-emerald-500 text-white hover:bg-emerald-400"
-                  >
-                    Join
-                  </Button>
-                </div>
-              ))
-            )}
           </CardContent>
         </Card>
       </div>

@@ -40,6 +40,14 @@ export default function LoginPage() {
 
   const canSubmit = email.trim().length > 3 && password.length >= 6 && !loading;
 
+  React.useEffect(() => {
+    const idToken = localStorage.getItem("auth_id_token");
+    const localId = localStorage.getItem("auth_local_id");
+    if (idToken && localId) {
+      router.replace("/home");
+    }
+  }, [router]);
+
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);

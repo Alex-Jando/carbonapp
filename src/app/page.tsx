@@ -1,12 +1,24 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 
 import { Button } from "./components/ui/button";
 import { Card } from "./components/ui/card";
 
 export default function HomePage() {
+  const router = useRouter();
+
+  useEffect(() => {
+    const idToken = localStorage.getItem("auth_id_token");
+    const localId = localStorage.getItem("auth_local_id");
+    if (idToken && localId) {
+      router.replace("/home");
+    }
+  }, [router]);
+
   return (
     <main className="relative min-h-dvh overflow-hidden bg-zinc-950 text-zinc-50">
       {/* Ambient green background */}

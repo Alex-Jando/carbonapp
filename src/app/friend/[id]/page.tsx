@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 
@@ -131,7 +130,7 @@ export default function FriendDetailPage() {
                   variant="outline"
                   className="border-white/20 bg-white/[0.03] text-zinc-100 hover:bg-white/[0.08]"
                 >
-                  <Link href="/friends">Back to Friends</Link>
+                  <a href="/social">Back to Social</a>
                 </Button>
               </div>
             </CardHeader>
@@ -146,30 +145,43 @@ export default function FriendDetailPage() {
               {loading ? <p className="text-zinc-300">Loading profile...</p> : null}
 
               {!loading && profile ? (
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-xl border border-white/10 bg-black/20 p-4">
-                    <p className="text-xs uppercase tracking-wide text-zinc-400">Username</p>
-                    <p className="mt-1 text-zinc-100">{profile.username || "N/A"}</p>
+                <div className="grid gap-4">
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                      <p className="text-xs uppercase tracking-wide text-zinc-400">Username</p>
+                      <p className="mt-1 text-zinc-100">{profile.username || "N/A"}</p>
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                      <p className="text-xs uppercase tracking-wide text-zinc-400">City</p>
+                      <p className="mt-1 text-zinc-100">{profile.city || "N/A"}</p>
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                      <p className="text-xs uppercase tracking-wide text-zinc-400">Email</p>
+                      <p className="mt-1 text-zinc-100">{profile.email || "N/A"}</p>
+                    </div>
                   </div>
-                  <div className="rounded-xl border border-white/10 bg-black/20 p-4">
-                    <p className="text-xs uppercase tracking-wide text-zinc-400">Email</p>
-                    <p className="mt-1 text-zinc-100">{profile.email || "N/A"}</p>
-                  </div>
-                  <div className="rounded-xl border border-white/10 bg-black/20 p-4">
-                    <p className="text-xs uppercase tracking-wide text-zinc-400">City</p>
-                    <p className="mt-1 text-zinc-100">{profile.city || "N/A"}</p>
-                  </div>
-                  <div className="rounded-xl border border-white/10 bg-black/20 p-4">
-                    <p className="text-xs uppercase tracking-wide text-zinc-400">Initial Footprint</p>
-                    <p className="mt-1 text-zinc-100">
-                      {profile.initialFootprintKg !== null
-                        ? `${profile.initialFootprintKg} kg/year`
-                        : "N/A"}
-                    </p>
-                  </div>
-                  <div className="rounded-xl border border-white/10 bg-black/20 p-4 sm:col-span-2">
-                    <p className="text-xs uppercase tracking-wide text-zinc-400">Carbon Offset Total</p>
-                    <p className="mt-1 text-zinc-100">{profile.carbonOffsetKgTotal} kg</p>
+
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-2xl border border-white/10 bg-emerald-500/10 p-4">
+                      <p className="text-xs uppercase tracking-wide text-emerald-200/70">
+                        Initial Footprint
+                      </p>
+                      <p className="mt-1 text-2xl font-semibold text-white">
+                        {profile.initialFootprintKg !== null
+                          ? `${profile.initialFootprintKg} kg`
+                          : "N/A"}
+                      </p>
+                      <p className="text-xs text-zinc-400">Estimated per year</p>
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-emerald-500/10 p-4">
+                      <p className="text-xs uppercase tracking-wide text-emerald-200/70">
+                        Carbon Offset
+                      </p>
+                      <p className="mt-1 text-2xl font-semibold text-white">
+                        {profile.carbonOffsetKgTotal} kg
+                      </p>
+                      <p className="text-xs text-zinc-400">Total offset achieved</p>
+                    </div>
                   </div>
                 </div>
               ) : null}
