@@ -203,28 +203,10 @@ export async function POST(request: Request) {
             carbonOffsetKg: newDailyCarbonOffset,
           };
 
-          const communityId =
-            Array.isArray(userData.communities) && userData.communities.length > 0
-              ? String(userData.communities[0])
-              : null;
-          let communityName: string | null = null;
-          if (communityId) {
-            const communitySnap = await transaction.get(
-              adminDb.collection("communities").doc(communityId),
-            );
-            if (communitySnap.exists) {
-              const communityData = communitySnap.data() ?? {};
-              communityName =
-                typeof communityData.name === "string" ? communityData.name : null;
-            }
-          }
-
           const completedPayload = {
             uid,
             username: String(userData.username ?? ""),
             userEmail: typeof userData.email === "string" ? userData.email : null,
-            communityId,
-            communityName,
             title: taskData.title ?? "Untitled task",
             carbonOffsetKg,
             imageUrl: imageUrl ?? null,
@@ -236,13 +218,6 @@ export async function POST(request: Request) {
           const userCompletedRef = userRef
             .collection("completedTasks")
             .doc(completedTaskId);
-          const communityCompletedRef = communityId
-            ? adminDb
-                .collection("communities")
-                .doc(communityId)
-                .collection("completedTasks")
-                .doc(completedTaskId)
-            : null;
 
           transaction.set(
             dailyStatsRef,
@@ -279,9 +254,6 @@ export async function POST(request: Request) {
 
           transaction.set(completedRef, completedPayload);
           transaction.set(userCompletedRef, completedPayload);
-          if (communityCompletedRef) {
-            transaction.set(communityCompletedRef, completedPayload);
-          }
 
           transaction.set(
             userRef,

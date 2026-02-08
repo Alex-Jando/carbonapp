@@ -67,31 +67,9 @@ export async function GET(request: Request) {
   const limit = Math.min(Number(searchParams.get("limit") ?? 15) || 15, 30);
 
   const adminDb = getAdminDb();
-  let query: FirebaseFirestore.Query;
+  const completedTasksRef = adminDb.collection("completedTasks");
 
-  if (uid) {
-    query = adminDb
-      .collection("users")
-      .doc(uid)
-      .collection("completedTasks")
-      .orderBy("completedAt", "desc")
-      .limit(limit);
-  } else if (communityId) {
-    query = adminDb
-      .collection("communities")
-      .doc(communityId)
-      .collection("completedTasks")
-      .orderBy("completedAt", "desc")
-      .limit(limit);
-  } else {
-    query = adminDb
-      .collection("completedTasks")
-      .orderBy("completedAt", "desc")
-      .limit(limit);
-  }
-
-  const snapshot = await query.get();
-  const items = snapshot.docs.map((doc) => {
+  const mapDoc = (doc: FirebaseFirestore.DocumentSnapshot) => {
     const data = doc.data() ?? {};
     const completedAt = data.completedAt?.toDate
       ? data.completedAt.toDate().toISOString()
@@ -105,10 +83,59 @@ export async function GET(request: Request) {
       userEmail: data.userEmail ?? null,
       imageUrl: data.imageUrl ?? null,
       uid: data.uid ?? "",
-      communityId: data.communityId ?? null,
-      communityName: data.communityName ?? null,
     };
-  });
+  };
+
+  async function fetchTasksByIds(ids: string[]) {
+    if (!ids.length) return [];
+    const refs = ids.map((id) => completedTasksRef.doc(id));
+    const snaps = await adminDb.getAll(...refs);
+    const items = snaps
+      .filter((snap) => snap.exists)
+      .map(mapDoc)
+      .sort((a, b) => {
+        const aTime = a.completedAt ? Date.parse(a.completedAt) : 0;
+        const bTime = b.completedAt ? Date.parse(b.completedAt) : 0;
+        return bTime - aTime;
+      });
+    return items.slice(0, limit);
+  }
+
+  let items: Array<Record<string, unknown>> = [];
+
+  if (uid) {
+    const userSnap = await adminDb.collection("users").doc(uid).get();
+    const completedTaskIds = Array.isArray(userSnap.data()?.completedTaskIds)
+      ? (userSnap.data()?.completedTaskIds as string[])
+      : [];
+    items = await fetchTasksByIds(completedTaskIds);
+  } else if (communityId) {
+    const communitySnap = await adminDb.collection("communities").doc(communityId).get();
+    const memberIds = Array.isArray(communitySnap.data()?.members)
+      ? (communitySnap.data()?.members as string[])
+      : [];
+    if (memberIds.length) {
+      const memberRefs = memberIds.map((id) => adminDb.collection("users").doc(id));
+      const memberSnaps = await adminDb.getAll(...memberRefs);
+      const allTaskIds = new Set<string>();
+      for (const memberSnap of memberSnaps) {
+        const memberData = memberSnap.data() ?? {};
+        const ids = Array.isArray(memberData.completedTaskIds)
+          ? (memberData.completedTaskIds as string[])
+          : [];
+        for (const id of ids) {
+          allTaskIds.add(String(id));
+        }
+      }
+      items = await fetchTasksByIds(Array.from(allTaskIds));
+    }
+  } else {
+    const snapshot = await completedTasksRef
+      .orderBy("completedAt", "desc")
+      .limit(limit)
+      .get();
+    items = snapshot.docs.map(mapDoc);
+  }
 
   return NextResponse.json({ items }, { status: 200 });
 }
