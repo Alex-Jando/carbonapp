@@ -60,7 +60,8 @@ export default function LoginPage() {
       }
 
       if (data.idToken) localStorage.setItem("auth_id_token", data.idToken);
-      if (data.refreshToken) localStorage.setItem("auth_refresh_token", data.refreshToken);
+      if (data.refreshToken)
+        localStorage.setItem("auth_refresh_token", data.refreshToken);
       localStorage.setItem("auth_local_id", data.localId);
 
       router.push("/questionnaire");
@@ -198,13 +199,6 @@ export default function LoginPage() {
               </form>
             </CardContent>
           </Card>
-
-          <div className="mt-6 text-center text-xs text-zinc-500">
-            <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-              Green theme • Motion UI • Firebase-ready
-            </span>
-          </div>
         </motion.div>
       </div>
     </main>

@@ -2,6 +2,19 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { motion } from "framer-motion";
+
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/src/app/components/ui/card";
+import { Button } from "@/src/app/components/ui/button";
+import { Input } from "@/src/app/components/ui/input";
+import { Label } from "@/src/app/components/ui/label";
+import { Alert, AlertDescription } from "@/src/app/components/ui/alert";
+import { Badge } from "@/src/app/components/ui/badge";
 
 type CommunitySummary = {
   id: string;
@@ -11,6 +24,7 @@ type CommunitySummary = {
 
 export default function SocialPage() {
   const router = useRouter();
+
   const [email, setEmail] = useState("");
   const [communityName, setCommunityName] = useState("");
   const [joinCommunityId, setJoinCommunityId] = useState("");
@@ -32,12 +46,14 @@ export default function SocialPage() {
 
     const loadCommunities = async () => {
       const res = await fetch("/api/social/all-communities", {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
       });
+
       if (res.status === 401) {
         handleAuthFailure();
         return;
       }
+
       const data = await res.json();
       if (res.ok && Array.isArray(data.communities)) {
         setCommunities(data.communities);
@@ -53,46 +69,52 @@ export default function SocialPage() {
       router.replace("/login");
       return null;
     }
+
     const res = await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`
+        Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify(body)
+      body: JSON.stringify(body),
     });
+
     if (res.status === 401) {
       handleAuthFailure();
       return null;
     }
+
     const data = await res.json();
     if (!res.ok) {
       setStatus(data.error ?? "Request failed.");
       return null;
     }
+
     setStatus("Success.");
     return data;
   }
 
-  async function handleAddFriend(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function handleAddFriend(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
     setStatus(null);
     const data = await postJson("/api/social/add-friend", { email });
-    if (data) {
-      setEmail("");
-    }
+    if (data) setEmail("");
   }
 
-  async function handleCreateCommunity(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function handleCreateCommunity(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
     setStatus(null);
-    const data = await postJson("/api/social/create-community", { name: communityName });
+
+    const data = await postJson("/api/social/create-community", {
+      name: communityName,
+    });
+
     if (data) {
       setCommunityName("");
       const token = localStorage.getItem("auth_id_token");
       if (token) {
         const res = await fetch("/api/social/all-communities", {
-          headers: { Authorization: `Bearer ${token}` }
+          headers: { Authorization: `Bearer ${token}` },
         });
         const payload = await res.json();
         if (res.ok && Array.isArray(payload.communities)) {
@@ -102,13 +124,13 @@ export default function SocialPage() {
     }
   }
 
-  async function handleJoinCommunity(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function handleJoinCommunity(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
     setStatus(null);
-    const data = await postJson("/api/social/join-community", { communityId: joinCommunityId });
-    if (data) {
-      setJoinCommunityId("");
-    }
+    const data = await postJson("/api/social/join-community", {
+      communityId: joinCommunityId,
+    });
+    if (data) setJoinCommunityId("");
   }
 
   async function handleJoinCommunityByList(id: string) {
@@ -117,67 +139,136 @@ export default function SocialPage() {
   }
 
   return (
-    <main>
-      <h1>Social</h1>
+    <main className="relative min-h-dvh bg-zinc-950 text-zinc-50">
+      {/* 🔥 Stronger green background */}
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute -top-40 left-1/2 h-[520px] w-[520px] -translate-x-1/2 rounded-full bg-emerald-500/30 blur-3xl" />
+        <div className="absolute inset-0 bg-[radial-gradient(900px_500px_at_50%_20%,rgba(16,185,129,0.18),transparent_55%)]" />
+      </div>
 
-      <section>
-        <h2>Add Friend</h2>
-        <form onSubmit={handleAddFriend}>
-          <input
-            type="email"
-            placeholder="friend@email.com"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            required
-          />
-          <button type="submit">Add Friend</button>
-        </form>
-      </section>
+      <div className="relative z-10 mx-auto max-w-5xl px-4 py-10">
+        <motion.h1
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-8 text-3xl font-semibold tracking-tight"
+        >
+          Social
+        </motion.h1>
 
-      <section>
-        <h2>Create Community</h2>
-        <form onSubmit={handleCreateCommunity}>
-          <input
-            type="text"
-            placeholder="Community name"
-            value={communityName}
-            onChange={(event) => setCommunityName(event.target.value)}
-            required
-          />
-          <button type="submit">Create</button>
-        </form>
-      </section>
+        {status ? (
+          <Alert className="mb-6 border-emerald-400/40 bg-emerald-500/15 text-white">
+            <AlertDescription>{status}</AlertDescription>
+          </Alert>
+        ) : null}
 
-      <section>
-        <h2>Join Community by ID</h2>
-        <form onSubmit={handleJoinCommunity}>
-          <input
-            type="text"
-            placeholder="Community ID"
-            value={joinCommunityId}
-            onChange={(event) => setJoinCommunityId(event.target.value)}
-            required
-          />
-          <button type="submit">Join</button>
-        </form>
-      </section>
+        <div className="grid gap-6 md:grid-cols-2">
+          {/* Add Friend */}
+          <Card className="border-white/10 bg-white/[0.06] backdrop-blur">
+            <CardHeader>
+              <CardTitle className="text-white">Add Friend</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleAddFriend} className="space-y-4">
+                <div className="space-y-2">
+                  <Label className="text-zinc-200">Email</Label>
+                  <Input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="friend@email.com"
+                    required
+                    className="border-white/10 bg-black/30 text-white placeholder:text-zinc-400 focus-visible:ring-emerald-400/60"
+                  />
+                </div>
+                <Button className="bg-emerald-500 text-white hover:bg-emerald-400">
+                  Add Friend
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
 
-      <section>
-        <h2>All Communities</h2>
-        {communities.length === 0 ? <p>No communities yet.</p> : null}
-        {communities.map((community) => (
-          <div key={community.id}>
-            <p>
-              {community.name} (members: {community.membersCount})
-            </p>
-            <button type="button" onClick={() => handleJoinCommunityByList(community.id)}>
-              Join
-            </button>
-          </div>
-        ))}
-      </section>
+          {/* Create Community */}
+          <Card className="border-white/10 bg-white/[0.06] backdrop-blur">
+            <CardHeader>
+              <CardTitle className="text-white">Create Community</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleCreateCommunity} className="space-y-4">
+                <div className="space-y-2">
+                  <Label className="text-zinc-200">Community Name</Label>
+                  <Input
+                    value={communityName}
+                    onChange={(e) => setCommunityName(e.target.value)}
+                    placeholder="Eco Warriors"
+                    required
+                    className="border-white/10 bg-black/30 text-white placeholder:text-zinc-400 focus-visible:ring-emerald-400/60"
+                  />
+                </div>
+                <Button className="bg-emerald-500 text-white hover:bg-emerald-400">
+                  Create
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+        </div>
 
-      {status ? <p>{status}</p> : null}
+        {/* Join Community */}
+        <Card className="mt-6 border-white/10 bg-white/[0.06] backdrop-blur">
+          <CardHeader>
+            <CardTitle className="text-white">Join Community by ID</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form
+              onSubmit={handleJoinCommunity}
+              className="flex flex-col gap-4 sm:flex-row"
+            >
+              <Input
+                value={joinCommunityId}
+                onChange={(e) => setJoinCommunityId(e.target.value)}
+                placeholder="Community ID"
+                required
+                className="border-white/10 bg-black/30 text-white placeholder:text-zinc-400 focus-visible:ring-emerald-400/60"
+              />
+              <Button className="bg-emerald-500 text-white hover:bg-emerald-400">
+                Join
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+
+        {/* Communities list */}
+        <Card className="mt-6 border-white/10 bg-white/[0.06] backdrop-blur">
+          <CardHeader>
+            <CardTitle className="text-white">All Communities</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {communities.length === 0 ? (
+              <p className="text-sm text-zinc-400">No communities yet.</p>
+            ) : (
+              communities.map((c) => (
+                <div
+                  key={c.id}
+                  className="flex items-center justify-between rounded-xl border border-white/10 bg-black/30 px-4 py-3"
+                >
+                  <div>
+                    <p className="font-medium text-white">{c.name}</p>
+                    <Badge className="mt-1 bg-white/10 text-zinc-200">
+                      {c.membersCount} members
+                    </Badge>
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={() => handleJoinCommunityByList(c.id)}
+                    className="bg-emerald-500 text-white hover:bg-emerald-400"
+                  >
+                    Join
+                  </Button>
+                </div>
+              ))
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </main>
   );
 }
