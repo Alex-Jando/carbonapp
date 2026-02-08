@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import admin from "firebase-admin";
+import { readFileSync } from "fs";
 import {
   calculateFootprint,
   mapAnswersToFootprintInput,
@@ -9,21 +11,57 @@ import {
   validateAnswers,
 } from "../../../../validateAnswers";
 
+export const runtime = "nodejs";
+
+function resolveServiceAccount() {
+  const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (trimmed.startsWith("{")) {
+    return JSON.parse(trimmed);
+  }
+  try {
+    const fileContent = readFileSync(trimmed, "utf-8");
+    return JSON.parse(fileContent);
+  } catch {
+    return null;
+  }
+}
+
+function getAdminApp() {
+  if (!admin.apps.length) {
+    const serviceAccount = resolveServiceAccount();
+    if (serviceAccount) {
+      admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount)
+      });
+    } else {
+      admin.initializeApp({
+        credential: admin.credential.applicationDefault()
+      });
+    }
+  }
+  return admin.app();
+}
+
+function getAdminAuth() {
+  return getAdminApp().auth();
+}
+
+function getAdminDb() {
+  return getAdminApp().firestore();
+}
+
+function getFieldValue() {
+  return admin.firestore.FieldValue;
+}
+
 type QuestionnaireSubmitBody = {
   questionnaireVersion: "v1";
   answers: Record<string, unknown>;
-  localId: string;
 };
 
 export async function POST(request: Request) {
-  const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
-  if (!projectId) {
-    return NextResponse.json(
-      { error: "Server is missing NEXT_PUBLIC_FIREBASE_PROJECT_ID." },
-      { status: 500 },
-    );
-  }
-
   let jsonBody: QuestionnaireSubmitBody;
   try {
     jsonBody = (await request.json()) as QuestionnaireSubmitBody;
@@ -38,10 +76,23 @@ export async function POST(request: Request) {
     );
   }
 
-  const localId =
-    typeof jsonBody.localId === "string" ? jsonBody.localId.trim() : "";
-  if (!localId) {
-    return NextResponse.json({ error: "Missing localId." }, { status: 400 });
+  const authHeader = request.headers.get("authorization") ?? "";
+  const tokenMatch = authHeader.match(/^Bearer (.+)$/i);
+  if (!tokenMatch) {
+    return NextResponse.json(
+      { error: "Missing Authorization Bearer token." },
+      { status: 401 },
+    );
+  }
+
+  let decoded;
+  try {
+    decoded = await getAdminAuth().verifyIdToken(tokenMatch[1]);
+  } catch {
+    return NextResponse.json(
+      { error: "Invalid or expired token." },
+      { status: 401 },
+    );
   }
 
   let validAnswers: ReturnType<typeof validateAnswers>["validAnswers"];
@@ -65,45 +116,14 @@ export async function POST(request: Request) {
     mapAnswersToFootprintInput(validAnswers);
   const footprint = calculateFootprint(calculatorInput);
 
-  const authHeader = request.headers.get("authorization") ?? "";
-  const tokenMatch = authHeader.match(/^Bearer (.+)$/i);
-  if (!tokenMatch) {
-    return NextResponse.json(
-      { error: "Missing Authorization Bearer token." },
-      { status: 401 },
-    );
-  }
-
-  const idToken = tokenMatch[1];
-  const updateUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/users/${localId}?updateMask.fieldPaths=initialFootprintKg`;
-  const updateBody = {
-    fields: {
-      initialFootprintKg: {
-        integerValue: Math.round(footprint.totalKgPerYear).toString(),
-      },
+  const adminDb = getAdminDb();
+  await adminDb.collection("users").doc(decoded.uid).set(
+    {
+      initialFootprintKg: Math.round(footprint.totalKgPerYear),
+      updatedAt: getFieldValue().serverTimestamp()
     },
-  };
-
-  const firestoreRes = await fetch(updateUrl, {
-    method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${idToken}`,
-    },
-    body: JSON.stringify(updateBody),
-  });
-
-  if (!firestoreRes.ok) {
-    const firestoreError = await firestoreRes.json().catch(() => ({}));
-    return NextResponse.json(
-      {
-        error:
-          firestoreError?.error?.message ??
-          "Failed to update initialFootprintKg.",
-      },
-      { status: firestoreRes.status },
-    );
-  }
+    { merge: true }
+  );
 
   return NextResponse.json({
     ok: true,
@@ -111,4 +131,3 @@ export async function POST(request: Request) {
     assumptions,
   });
 }
-

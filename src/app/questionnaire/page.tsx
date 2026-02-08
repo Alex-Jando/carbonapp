@@ -187,8 +187,7 @@ export default function QuestionnairePage() {
       },
       body: JSON.stringify({
         questionnaireVersion: "v1",
-        answers,
-        localId
+        answers
       })
     });
 

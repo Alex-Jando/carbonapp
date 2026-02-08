@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 type AuthBody = {
   email?: string;
   password?: string;
+  username?: string;
+  city?: string;
 };
 
 export async function POST(request: Request) {
@@ -27,10 +29,12 @@ export async function POST(request: Request) {
 
   const email = typeof body.email === "string" ? body.email.trim() : "";
   const password = typeof body.password === "string" ? body.password : "";
+  const username = typeof body.username === "string" ? body.username.trim() : "";
+  const city = typeof body.city === "string" ? body.city.trim() : "";
 
-  if (!email || !password) {
+  if (!email || !password || !username || !city) {
     return NextResponse.json(
-      { error: "Email and password are required." },
+      { error: "Email, password, username, and city are required." },
       { status: 400 },
     );
   }
@@ -53,14 +57,20 @@ export async function POST(request: Request) {
   const userDoc = {
     fields: {
       email: { stringValue: data.email ?? "" },
-      username: { stringValue: "" },
-      city: { stringValue: "" },
+      username: { stringValue: username },
+      city: { stringValue: city },
       friends: { arrayValue: { values: [] } },
       communities: { arrayValue: { values: [] } },
       initialFootprintKg: { nullValue: null },
       carbonOffsetKgTotal: { integerValue: "0" },
       dailyTasks: { arrayValue: { values: [] } },
       completedTaskIds: { arrayValue: { values: [] } },
+      tasksCompletedCount: { integerValue: "0" },
+      streakCurrent: { integerValue: "0" },
+      streakBest: { integerValue: "0" },
+      lastCompletionDateKey: { nullValue: null },
+      createdAt: { timestampValue: new Date().toISOString() },
+      updatedAt: { timestampValue: new Date().toISOString() },
     },
   };
 

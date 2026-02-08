@@ -45,7 +45,7 @@ function extractJsonContent(raw: string): string {
   return trimmed;
 }
 
-function clampTaskValue(value: number, min = 0, max = 50): number {
+function clampTaskValue(value: number, min = 1, max = 10): number {
   if (!Number.isFinite(value)) return min;
   return Math.min(Math.max(value, min), max);
 }
@@ -127,6 +127,7 @@ export async function generateDailyTasks(
               "Return exactly 10 tasks for the next 24 hours.\n" +
               "Tasks must be low-effort, realistic, and require no major purchases.\n" +
               "Each title must start with a verb.\n" +
+              "Set carbonOffsetKg between 1 and 10 for each task (optimistic is fine to motivate the user).\n" +
               "Output must match the provided JSON schema exactly.",
           },
           {

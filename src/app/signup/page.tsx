@@ -24,6 +24,15 @@ type AuthResponse = {
   error?: string;
 };
 
+const CITY_OPTIONS = [
+  "Toronto",
+  "Hamilton",
+  "New York",
+  "Chicago",
+  "San Francisco",
+  "Vancouver"
+];
+
 function prettyError(message?: string) {
   if (!message) return "Signup failed.";
   return message;
@@ -33,16 +42,20 @@ export default function SignupPage() {
   const router = useRouter();
 
   const [email, setEmail] = React.useState("");
+  const [username, setUsername] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [confirmPassword, setConfirmPassword] = React.useState("");
+  const [city, setCity] = React.useState(CITY_OPTIONS[0]);
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(false);
 
   const canSubmit =
     email.trim().length > 3 &&
+    username.trim().length > 1 &&
     password.length >= 6 &&
     confirmPassword.length >= 6 &&
     password === confirmPassword &&
+    city.trim().length > 0 &&
     !loading;
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -60,7 +73,7 @@ export default function SignupPage() {
       const res = await fetch("/api/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, username, city }),
       });
 
       const data = (await res.json()) as AuthResponse;
@@ -144,6 +157,22 @@ export default function SignupPage() {
                 </div>
 
                 <div className="space-y-2">
+                  <Label htmlFor="username" className="text-zinc-200">
+                    Username
+                  </Label>
+                  <Input
+                    id="username"
+                    type="text"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    autoComplete="username"
+                    placeholder="EcoHero"
+                    required
+                    className="h-11 border-white/10 bg-black/20 text-zinc-100 placeholder:text-zinc-500 focus-visible:ring-emerald-400/40"
+                  />
+                </div>
+
+                <div className="space-y-2">
                   <Label htmlFor="password" className="text-zinc-200">
                     Password
                   </Label>
@@ -157,6 +186,24 @@ export default function SignupPage() {
                     required
                     className="h-11 border-white/10 bg-black/20 text-zinc-100 placeholder:text-zinc-500 focus-visible:ring-emerald-400/40"
                   />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="city" className="text-zinc-200">
+                    City
+                  </Label>
+                  <select
+                    id="city"
+                    value={city}
+                    onChange={(e) => setCity(e.target.value)}
+                    className="h-11 w-full rounded-md border border-white/10 bg-black/20 px-3 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-emerald-400/40"
+                  >
+                    {CITY_OPTIONS.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div className="space-y-2">

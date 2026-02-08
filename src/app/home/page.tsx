@@ -5,6 +5,9 @@ import { useRouter } from "next/navigation";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getStorage } from "firebase/storage";
+import { WelcomeHeader } from "@/src/components/home/WelcomeHeader";
+import { DailyTasksCard } from "@/src/components/home/DailyTasksCard";
+import { StatsOverview } from "@/src/components/home/StatsOverview";
 
 function getFirebaseStorage() {
   const firebaseConfig = {
@@ -29,6 +32,16 @@ export default function HomePage() {
   const [loadingTasks, setLoadingTasks] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filesByTask, setFilesByTask] = useState<Record<string, File | null>>({});
+  const [previewUrls, setPreviewUrls] = useState<Record<string, string>>({});
+  const [username, setUsername] = useState<string>("there");
+  const [statsLoading, setStatsLoading] = useState(false);
+  const [tasksCompletedCount, setTasksCompletedCount] = useState(0);
+  const [carbonOffsetKgTotal, setCarbonOffsetKgTotal] = useState(0);
+  const [streakCurrent, setStreakCurrent] = useState(0);
+  const [streakBest, setStreakBest] = useState(0);
+  const [dailyStats, setDailyStats] = useState<
+    Array<{ dateKey: string; tasksCompleted: number; carbonOffsetKg: number }>
+  >([]);
 
   function handleAuthFailure() {
     localStorage.removeItem("auth_id_token");
@@ -133,7 +146,23 @@ export default function HomePage() {
       setLoadingTasks(false);
     };
 
-    void loadProfile().then(() => loadTasks());
+    const loadStats = async () => {
+      setStatsLoading(true);
+      const res = await fetchWithAuth("/api/home-stats");
+      if (!res) return;
+      const data = await res.json();
+      if (res.ok) {
+        setUsername(data.user?.username || "there");
+        setTasksCompletedCount(Number(data.user?.tasksCompletedCount) || 0);
+        setCarbonOffsetKgTotal(Number(data.user?.carbonOffsetKgTotal) || 0);
+        setStreakCurrent(Number(data.user?.streakCurrent) || 0);
+        setStreakBest(Number(data.user?.streakBest) || 0);
+        setDailyStats(Array.isArray(data.dailyStats) ? data.dailyStats : []);
+      }
+      setStatsLoading(false);
+    };
+
+    void loadProfile().then(() => loadTasks()).then(() => loadStats());
   }, [router]);
 
   const remainingTasks = useMemo(() => tasks.length, [tasks.length]);
@@ -213,6 +242,29 @@ export default function HomePage() {
       delete next[taskId];
       return next;
     });
+    setPreviewUrls((prev) => {
+      const next = { ...prev };
+      const url = next[taskId];
+      if (url) {
+        URL.revokeObjectURL(url);
+      }
+      delete next[taskId];
+      return next;
+    });
+
+    if (data.totals) {
+      setCarbonOffsetKgTotal(Number(data.totals.carbonOffsetKgTotal) || carbonOffsetKgTotal);
+      setTasksCompletedCount(Number(data.totals.tasksCompletedCount) || tasksCompletedCount);
+      setStreakCurrent(Number(data.totals.streakCurrent) || streakCurrent);
+      setStreakBest(Number(data.totals.streakBest) || streakBest);
+    }
+
+    if (data.todayStats) {
+      setDailyStats((prev) => {
+        const existing = prev.filter((stat) => stat.dateKey !== data.todayStats.dateKey);
+        return [...existing, data.todayStats].sort((a, b) => a.dateKey.localeCompare(b.dateKey));
+      });
+    }
   }
 
   async function handleLogout() {
@@ -223,43 +275,95 @@ export default function HomePage() {
     router.replace("/login");
   }
 
+  const todayLabel = new Date().toLocaleDateString("en-CA", {
+    timeZone: "America/Toronto",
+    weekday: "long",
+    month: "long",
+    day: "numeric"
+  });
+
   return (
-    <main>
-      <h1>Home</h1>
-      <p>User ID: {localId}</p>
-      <p>Initial Footprint (kg/year): {initialFootprintKg}</p>
-      <p>Daily tasks remaining: {remainingTasks}</p>
-      {error ? <p>{error}</p> : null}
-      {loadingTasks ? <p>Loading tasks...</p> : null}
-      <section>
-        <h2>Daily Tasks</h2>
-        {tasks.length === 0 && !loadingTasks ? <p>No tasks found.</p> : null}
-        {tasks.map((task) => (
-          <div key={String(task.id)}>
-            <h3>{String(task.title ?? "Untitled task")}</h3>
-            <p>Carbon Offset (kg): {Number(task.carbonOffsetKg ?? 0)}</p>
-            {task.difficulty ? <p>Difficulty: {String(task.difficulty)}</p> : null}
-            {task.reason ? <p>Reason: {String(task.reason)}</p> : null}
-            <label>
-              Upload proof (optional)
-              <input
-                type="file"
-                accept="image/*"
-                onChange={(event) => {
-                  const file = event.target.files?.[0] ?? null;
-                  setFilesByTask((prev) => ({ ...prev, [String(task.id)]: file }));
-                }}
-              />
-            </label>
-            <button type="button" onClick={() => handleCompleteTask(String(task.id))}>
-              Complete
-            </button>
+    <main className="min-h-dvh bg-zinc-950 text-zinc-50">
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 py-10">
+        <WelcomeHeader username={username} todayLabel={todayLabel} />
+
+        <div className="grid gap-6 lg:grid-cols-[1.35fr_0.65fr]">
+          <DailyTasksCard
+            tasks={tasks.map((task) => ({
+              id: String(task.id),
+              title: String(task.title ?? "Untitled task"),
+              carbonOffsetKg: Number(task.carbonOffsetKg ?? 0),
+              difficulty: task.difficulty ? String(task.difficulty) : undefined,
+              reason: task.reason ? String(task.reason) : undefined
+            }))}
+            loading={loadingTasks}
+            error={error}
+            onComplete={handleCompleteTask}
+            onFileChange={(taskId, file) => {
+              setFilesByTask((prev) => ({ ...prev, [taskId]: file }));
+              setPreviewUrls((prev) => {
+                const next = { ...prev };
+                const existing = next[taskId];
+                if (existing) {
+                  URL.revokeObjectURL(existing);
+                }
+                if (file) {
+                  next[taskId] = URL.createObjectURL(file);
+                } else {
+                  delete next[taskId];
+                }
+                return next;
+              });
+            }}
+            previewUrls={previewUrls}
+          />
+
+          <div className="flex flex-col gap-6">
+            <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-6 shadow-[0_18px_60px_rgba(0,0,0,0.35)]">
+              <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/70">
+                Today
+              </p>
+              <p className="mt-2 text-2xl font-semibold text-white">
+                {remainingTasks} tasks left
+              </p>
+              <p className="mt-2 text-sm text-zinc-400">
+                Keep your momentum going. Every small action adds up.
+              </p>
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="mt-4 rounded-full border border-white/10 bg-black/30 px-4 py-2 text-xs text-zinc-200 hover:border-emerald-400/40"
+              >
+                Logout
+              </button>
+            </div>
+
+            {statsLoading ? (
+              <div className="h-40 animate-pulse rounded-3xl bg-white/5" />
+            ) : (
+              <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-emerald-400/10 via-white/5 to-transparent p-6">
+                <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/70">
+                  Impact
+                </p>
+                <p className="mt-2 text-3xl font-semibold text-white">
+                  {carbonOffsetKgTotal.toFixed(1)} kg
+                </p>
+                <p className="text-sm text-zinc-400">
+                  Total carbon offset so far.
+                </p>
+              </div>
+            )}
           </div>
-        ))}
-      </section>
-      <button type="button" onClick={handleLogout}>
-        Logout
-      </button>
+        </div>
+
+        <StatsOverview
+          streakCurrent={streakCurrent}
+          streakBest={streakBest}
+          tasksCompletedCount={tasksCompletedCount}
+          carbonOffsetKgTotal={carbonOffsetKgTotal}
+          dailyStats={dailyStats}
+        />
+      </div>
     </main>
   );
 }

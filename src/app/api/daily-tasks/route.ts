@@ -95,6 +95,31 @@ export async function GET(request: Request) {
   const userSnap = await userRef.get();
   const userData = userSnap.exists ? userSnap.data() ?? {} : {};
 
+  const needsDefaults =
+    userData.tasksCompletedCount === undefined ||
+    userData.streakCurrent === undefined ||
+    userData.streakBest === undefined ||
+    userData.lastCompletionDateKey === undefined ||
+    userData.carbonOffsetKgTotal === undefined ||
+    userData.friends === undefined ||
+    userData.communities === undefined;
+
+  if (needsDefaults) {
+    await userRef.set(
+      {
+        tasksCompletedCount: userData.tasksCompletedCount ?? 0,
+        streakCurrent: userData.streakCurrent ?? 0,
+        streakBest: userData.streakBest ?? 0,
+        lastCompletionDateKey: userData.lastCompletionDateKey ?? null,
+        carbonOffsetKgTotal: userData.carbonOffsetKgTotal ?? 0,
+        friends: Array.isArray(userData.friends) ? userData.friends : [],
+        communities: Array.isArray(userData.communities) ? userData.communities : [],
+        updatedAt: getFieldValue().serverTimestamp()
+      },
+      { merge: true }
+    );
+  }
+
   const dailyTasksMeta = userData.dailyTasksMeta ?? null;
   const metaDateKey = dailyTasksMeta?.dateKey ?? null;
   const storedDailyTasks = Array.isArray(userData.dailyTasks) ? userData.dailyTasks : [];

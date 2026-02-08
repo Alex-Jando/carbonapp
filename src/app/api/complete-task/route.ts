@@ -10,9 +10,15 @@ function getTorontoDateKey(date = new Date()): string {
     timeZone: "America/Toronto",
     year: "numeric",
     month: "2-digit",
-    day: "2-digit"
+    day: "2-digit",
   });
   return formatter.format(date);
+}
+
+function getTorontoDateKeyOffset(days: number): string {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return getTorontoDateKey(date);
 }
 
 function resolveServiceAccount() {
@@ -35,11 +41,11 @@ function getAdminApp() {
     const serviceAccount = resolveServiceAccount();
     if (serviceAccount) {
       admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount)
+        credential: admin.credential.cert(serviceAccount),
       });
     } else {
       admin.initializeApp({
-        credential: admin.credential.applicationDefault()
+        credential: admin.credential.applicationDefault(),
       });
     }
   }
@@ -67,14 +73,20 @@ function getBearerToken(request: Request): string | null {
 export async function POST(request: Request) {
   const token = getBearerToken(request);
   if (!token) {
-    return NextResponse.json({ error: "Missing Authorization Bearer token." }, { status: 401 });
+    return NextResponse.json(
+      { error: "Missing Authorization Bearer token." },
+      { status: 401 },
+    );
   }
 
   let decoded;
   try {
     decoded = await getAdminAuth().verifyIdToken(token);
   } catch {
-    return NextResponse.json({ error: "Invalid or expired token." }, { status: 401 });
+    return NextResponse.json(
+      { error: "Invalid or expired token." },
+      { status: 401 },
+    );
   }
 
   let jsonBody: unknown;
@@ -88,7 +100,7 @@ export async function POST(request: Request) {
   if (!parsedBody.success) {
     return NextResponse.json(
       { error: "Invalid request body.", details: parsedBody.error.flatten() },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -100,6 +112,16 @@ export async function POST(request: Request) {
 
   let completedTaskId = "";
   let carbonOffsetKg = 0;
+  let nextCarbonOffsetTotal = 0;
+  let nextTasksCompletedCount = 0;
+  let nextStreakCurrent = 0;
+  let nextStreakBest = 0;
+  let nextLastCompletionDateKey: string | null = null;
+  let nextDailyStats: {
+    dateKey: string;
+    tasksCompleted: number;
+    carbonOffsetKg: number;
+  } | null = null;
 
   try {
     await adminDb.runTransaction(async (transaction) => {
@@ -109,9 +131,12 @@ export async function POST(request: Request) {
       }
 
       const userData = userSnap.data() ?? {};
-      const dailyTasks: Array<Record<string, unknown>> = Array.isArray(userData.dailyTasks)
+      const rawDailyTasks = Array.isArray(userData.dailyTasks)
         ? userData.dailyTasks
         : [];
+      const dailyTasks: Array<Record<string, unknown>> = rawDailyTasks.filter(
+        (task) => task && typeof task === "object" && "id" in task,
+      ) as Array<Record<string, unknown>>;
 
       const taskIndex = dailyTasks.findIndex((task) => task.id === dailyTaskId);
       if (taskIndex === -1) {
@@ -121,9 +146,64 @@ export async function POST(request: Request) {
       const taskData = dailyTasks[taskIndex];
       carbonOffsetKg = Number(taskData.carbonOffsetKg) || 0;
       const dateKey = String(taskData.dateKey || getTorontoDateKey());
+      const yesterdayKey = getTorontoDateKeyOffset(-1);
 
       const completedRef = tasksRef.doc(dailyTaskId);
       completedTaskId = completedRef.id;
+
+      const currentCarbonOffsetTotal =
+        Number(userData.carbonOffsetKgTotal) || 0;
+      const currentTasksCompletedCount =
+        Number(userData.tasksCompletedCount) || 0;
+      const currentStreak = Number(userData.streakCurrent) || 0;
+      const currentBest = Number(userData.streakBest) || 0;
+      const lastCompletion = userData.lastCompletionDateKey ?? null;
+
+      if (lastCompletion === dateKey) {
+        nextStreakCurrent = currentStreak || 1;
+      } else if (lastCompletion === yesterdayKey) {
+        nextStreakCurrent = currentStreak + 1;
+      } else {
+        nextStreakCurrent = 1;
+      }
+      nextStreakBest = Math.max(currentBest, nextStreakCurrent);
+      nextLastCompletionDateKey = dateKey;
+
+      nextTasksCompletedCount = currentTasksCompletedCount + 1;
+      nextCarbonOffsetTotal = currentCarbonOffsetTotal + carbonOffsetKg;
+
+      const updatedDailyTasks = dailyTasks.filter(
+        (task) => task.id !== dailyTaskId,
+      );
+
+      const dailyStatsRef = userRef.collection("dailyStats").doc(dateKey);
+      const dailyStatsSnap = await transaction.get(dailyStatsRef);
+      const dailyStatsData = dailyStatsSnap.exists
+        ? (dailyStatsSnap.data() ?? {})
+        : {};
+      const currentDailyTasksCompleted =
+        Number(dailyStatsData.tasksCompleted) || 0;
+      const currentDailyCarbonOffset =
+        Number(dailyStatsData.carbonOffsetKg) || 0;
+      const newDailyTasksCompleted = currentDailyTasksCompleted + 1;
+      const newDailyCarbonOffset = currentDailyCarbonOffset + carbonOffsetKg;
+
+      nextDailyStats = {
+        dateKey,
+        tasksCompleted: newDailyTasksCompleted,
+        carbonOffsetKg: newDailyCarbonOffset,
+      };
+
+      transaction.set(
+        dailyStatsRef,
+        {
+          dateKey,
+          tasksCompleted: getFieldValue().increment(1),
+          carbonOffsetKg: getFieldValue().increment(carbonOffsetKg),
+          updatedAt: getFieldValue().serverTimestamp(),
+        },
+        { merge: true },
+      );
 
       transaction.set(completedRef, {
         uid,
@@ -132,29 +212,43 @@ export async function POST(request: Request) {
         imageUrl: imageUrl ?? null,
         dateKey,
         completedAt: getFieldValue().serverTimestamp(),
-        sourceDailyTaskId: dailyTaskId
+        sourceDailyTaskId: dailyTaskId,
       });
 
-      const updatedDailyTasks = dailyTasks.filter((task) => task.id !== dailyTaskId);
       transaction.set(
         userRef,
         {
           dailyTasks: updatedDailyTasks,
           completedTaskIds: getFieldValue().arrayUnion(completedTaskId),
           carbonOffsetKgTotal: getFieldValue().increment(carbonOffsetKg),
-          updatedAt: getFieldValue().serverTimestamp()
+          tasksCompletedCount: getFieldValue().increment(1),
+          streakCurrent: nextStreakCurrent,
+          streakBest: nextStreakBest,
+          lastCompletionDateKey: nextLastCompletionDateKey,
+          friends: Array.isArray(userData.friends) ? userData.friends : [],
+          communities: Array.isArray(userData.communities)
+            ? userData.communities
+            : [],
+          updatedAt: getFieldValue().serverTimestamp(),
         },
-        { merge: true }
+        { merge: true },
       );
     });
   } catch (error) {
     if (error instanceof Error && error.message === "DAILY_TASK_NOT_FOUND") {
-      return NextResponse.json({ error: "Daily task not found." }, { status: 404 });
+      return NextResponse.json(
+        { error: "Daily task not found." },
+        { status: 404 },
+      );
     }
     if (error instanceof Error && error.message === "USER_NOT_FOUND") {
       return NextResponse.json({ error: "User not found." }, { status: 404 });
     }
-    return NextResponse.json({ error: "Failed to complete task." }, { status: 500 });
+    console.log(error);
+    return NextResponse.json(
+      { error: "Failed to complete task." },
+      { status: 500 },
+    );
   }
 
   const remainingSnap = await userRef.get();
@@ -167,8 +261,16 @@ export async function POST(request: Request) {
       ok: true,
       completedTaskId,
       carbonOffsetKg,
-      remainingTasksCount: remainingTasks
+      remainingTasksCount: remainingTasks,
+      totals: {
+        carbonOffsetKgTotal: nextCarbonOffsetTotal,
+        tasksCompletedCount: nextTasksCompletedCount,
+        streakCurrent: nextStreakCurrent,
+        streakBest: nextStreakBest,
+        lastCompletionDateKey: nextLastCompletionDateKey,
+      },
+      todayStats: nextDailyStats,
     },
-    { status: 200 }
+    { status: 200 },
   );
 }
