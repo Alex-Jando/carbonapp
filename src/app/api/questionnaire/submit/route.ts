@@ -5,6 +5,7 @@ import {
   calculateFootprint,
   mapAnswersToFootprintInput,
 } from "../../../../footprint";
+import { buildQuestionnaireCompressionV1 } from "../../../../questionnaireCompression";
 import { QUESTIONNAIRE_V1 } from "../../../../questionnaire";
 import {
   AnswerValidationError,
@@ -33,11 +34,11 @@ function getAdminApp() {
     const serviceAccount = resolveServiceAccount();
     if (serviceAccount) {
       admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount)
+        credential: admin.credential.cert(serviceAccount),
       });
     } else {
       admin.initializeApp({
-        credential: admin.credential.applicationDefault()
+        credential: admin.credential.applicationDefault(),
       });
     }
   }
@@ -115,20 +116,28 @@ export async function POST(request: Request) {
   const { calculatorInput, assumptions } =
     mapAnswersToFootprintInput(validAnswers);
   const footprint = calculateFootprint(calculatorInput);
-  const initialFootprintKg = Math.round(footprint.totalKgPerYear * 10) / 10;
+  const roundedFootprintKg = Math.round(footprint.totalKgPerYear);
+  const questionnaireCompression = buildQuestionnaireCompressionV1({
+    answers: validAnswers,
+    initialFootprintKg: roundedFootprintKg,
+    breakdown: footprint.breakdown,
+  });
 
   const adminDb = getAdminDb();
-  await adminDb.collection("users").doc(decoded.uid).set(
-    {
-      initialFootprintKg,
-      updatedAt: getFieldValue().serverTimestamp()
-    },
-    { merge: true }
-  );
+  await adminDb
+    .collection("users")
+    .doc(decoded.uid)
+    .set(
+      {
+        initialFootprintKg: Math.round(footprint.totalKgPerYear),
+        updatedAt: getFieldValue().serverTimestamp(),
+      },
+      { merge: true },
+    );
 
   return NextResponse.json({
     ok: true,
-    initialFootprintKg,
+    initialFootprintKg: Math.round(footprint.totalKgPerYear),
     assumptions,
   });
 }
