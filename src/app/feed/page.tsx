@@ -85,7 +85,7 @@ export default function FeedPage() {
   }, [leaderboardLimit]);
 
   return (
-    <main className="relative min-h-dvh bg-zinc-950 text-zinc-50">
+    <main className="relative min-h-dvh overflow-hidden bg-zinc-950 text-zinc-50">
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute -top-40 left-1/2 h-[520px] w-[520px] -translate-x-1/2 rounded-full bg-emerald-500/20 blur-3xl" />
         <div className="absolute -bottom-48 right-[-120px] h-[520px] w-[520px] rounded-full bg-lime-400/10 blur-3xl" />
