@@ -39,6 +39,66 @@ export default function SocialPage() {
   const [friends, setFriends] = useState<FriendSummary[]>([]);
   const [status, setStatus] = useState<string | null>(null);
 
+  async function loadMe(token: string) {
+    const meRes = await fetch("/api/social/me", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (meRes.status === 401) {
+      handleAuthFailure();
+      return;
+    }
+    const meData = await meRes.json();
+    if (meRes.ok) {
+      setMyCommunityIds(Array.isArray(meData.communities) ? meData.communities : []);
+      const friendIds = Array.isArray(meData.friends) ? meData.friends : [];
+      const friendResults: FriendSummary[] = [];
+      for (const id of friendIds) {
+        const res = await fetch(`/api/social/user?uid=${encodeURIComponent(id)}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.status === 401) {
+          handleAuthFailure();
+          return;
+        }
+        const data = await res.json();
+        if (res.ok) {
+          friendResults.push({
+            uid: data.uid,
+            username: data.username ?? "",
+            email: data.email ?? "",
+          });
+        }
+      }
+      setFriends(friendResults);
+    }
+  }
+
+  async function loadCommunities(token: string) {
+    const res = await fetch("/api/social/all-communities", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (res.status === 401) {
+      handleAuthFailure();
+      return;
+    }
+
+    const data = await res.json();
+    if (res.ok && Array.isArray(data.communities)) {
+      setCommunities(data.communities);
+    }
+  }
+
+  async function refreshSocialData() {
+    const token = localStorage.getItem("auth_id_token");
+    if (!token) {
+      router.replace("/login");
+      return;
+    }
+    await loadMe(token);
+    await loadCommunities(token);
+  }
+
   function handleAuthFailure() {
     localStorage.removeItem("auth_id_token");
     localStorage.removeItem("auth_local_id");
@@ -52,57 +112,7 @@ export default function SocialPage() {
       return;
     }
 
-    const loadMe = async () => {
-      const meRes = await fetch("/api/social/me", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (meRes.status === 401) {
-        handleAuthFailure();
-        return;
-      }
-      const meData = await meRes.json();
-      if (meRes.ok) {
-        setMyCommunityIds(Array.isArray(meData.communities) ? meData.communities : []);
-        const friendIds = Array.isArray(meData.friends) ? meData.friends : [];
-        const friendResults: FriendSummary[] = [];
-        for (const id of friendIds) {
-          const res = await fetch(`/api/social/user?uid=${encodeURIComponent(id)}`, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          if (res.status === 401) {
-            handleAuthFailure();
-            return;
-          }
-          const data = await res.json();
-          if (res.ok) {
-            friendResults.push({
-              uid: data.uid,
-              username: data.username ?? "",
-              email: data.email ?? "",
-            });
-          }
-        }
-        setFriends(friendResults);
-      }
-    };
-
-    const loadCommunities = async () => {
-      const res = await fetch("/api/social/all-communities", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (res.status === 401) {
-        handleAuthFailure();
-        return;
-      }
-
-      const data = await res.json();
-      if (res.ok && Array.isArray(data.communities)) {
-        setCommunities(data.communities);
-      }
-    };
-
-    void loadMe().then(() => loadCommunities());
+    void loadMe(token).then(() => loadCommunities(token));
   }, [router]);
 
   async function postJson(url: string, body: Record<string, unknown>) {
@@ -142,31 +152,7 @@ export default function SocialPage() {
     const data = await postJson("/api/social/add-friend", { email });
     if (data) {
       setEmail("");
-      const token = localStorage.getItem("auth_id_token");
-      if (token) {
-        const meRes = await fetch("/api/social/me", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const meData = await meRes.json();
-        if (meRes.ok) {
-          const ids = Array.isArray(meData.friends) ? meData.friends : [];
-          const results: FriendSummary[] = [];
-          for (const id of ids) {
-            const res = await fetch(`/api/social/user?uid=${encodeURIComponent(id)}`, {
-              headers: { Authorization: `Bearer ${token}` },
-            });
-            const userData = await res.json();
-            if (res.ok) {
-              results.push({
-                uid: userData.uid,
-                username: userData.username ?? "",
-                email: userData.email ?? "",
-              });
-            }
-          }
-          setFriends(results);
-        }
-      }
+      await refreshSocialData();
     }
   }
 
@@ -180,16 +166,7 @@ export default function SocialPage() {
 
     if (data) {
       setCommunityName("");
-      const token = localStorage.getItem("auth_id_token");
-      if (token) {
-        const res = await fetch("/api/social/all-communities", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const payload = await res.json();
-        if (res.ok && Array.isArray(payload.communities)) {
-          setCommunities(payload.communities);
-        }
-      }
+      await refreshSocialData();
     }
   }
 
@@ -199,12 +176,18 @@ export default function SocialPage() {
     const data = await postJson("/api/social/join-community", {
       communityId: joinCommunityId,
     });
-    if (data) setJoinCommunityId("");
+    if (data) {
+      setJoinCommunityId("");
+      await refreshSocialData();
+    }
   }
 
   async function handleJoinCommunityByList(id: string) {
     setStatus(null);
-    await postJson("/api/social/join-community", { communityId: id });
+    const data = await postJson("/api/social/join-community", { communityId: id });
+    if (data) {
+      await refreshSocialData();
+    }
   }
 
   const myCommunities = useMemo(

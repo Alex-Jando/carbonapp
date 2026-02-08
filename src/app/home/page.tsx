@@ -278,6 +278,16 @@ export default function HomePage() {
         return [...existing, data.todayStats].sort((a, b) => a.dateKey.localeCompare(b.dateKey));
       });
     }
+
+    const resRecent = await fetchWithAuth(
+      `/api/completed-tasks?uid=${encodeURIComponent(uid)}&limit=15`,
+    );
+    if (resRecent) {
+      const recentData = await resRecent.json();
+      if (resRecent.ok) {
+        setRecentCompleted(Array.isArray(recentData.items) ? recentData.items : []);
+      }
+    }
   }
 
   async function handleLogout() {
