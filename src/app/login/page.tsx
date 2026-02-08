@@ -191,7 +191,7 @@ export default function LoginPage() {
                 <Button
                   type="submit"
                   disabled={!canSubmit}
-                  className="relative h-11 w-full overflow-hidden bg-gradient-to-r from-emerald-400 to-lime-300 text-white shadow-[0_18px_55px_rgba(16,185,129,0.22)] hover:brightness-105 active:brightness-95"
+                  className="relative h-11 w-full overflow-hidden bg-gradient-to-r from-emerald-600 via-emerald-500 to-lime-400/80 text-white shadow-[0_18px_55px_rgba(16,185,129,0.18)] hover:brightness-100 hover:ring-1 hover:ring-emerald-200/40 active:brightness-95"
                 >
                   <motion.span
                     whileTap={{ scale: 0.985 }}

@@ -237,7 +237,7 @@ export default function SocialPage() {
                     className="border-white/10 bg-black/30 text-white placeholder:text-zinc-400 focus-visible:ring-emerald-400/60"
                   />
                 </div>
-                <Button className="bg-emerald-500 text-white hover:bg-emerald-400">
+                <Button className="bg-gradient-to-r from-emerald-600 via-emerald-500 to-lime-400/80 text-white shadow-[0_12px_35px_rgba(16,185,129,0.18)] hover:brightness-100 hover:ring-1 hover:ring-emerald-200/40">
                   Add Friend
                 </Button>
               </form>
@@ -261,7 +261,7 @@ export default function SocialPage() {
                     className="border-white/10 bg-black/30 text-white placeholder:text-zinc-400 focus-visible:ring-emerald-400/60"
                   />
                 </div>
-                <Button className="bg-emerald-500 text-white hover:bg-emerald-400">
+                <Button className="bg-gradient-to-r from-emerald-600 via-emerald-500 to-lime-400/80 text-white shadow-[0_12px_35px_rgba(16,185,129,0.18)] hover:brightness-100 hover:ring-1 hover:ring-emerald-200/40">
                   Create
                 </Button>
               </form>
@@ -365,7 +365,7 @@ export default function SocialPage() {
                         <Button
                           size="sm"
                           onClick={() => handleJoinCommunityByList(c.id)}
-                          className="bg-emerald-500 text-white hover:bg-emerald-400"
+                          className="bg-gradient-to-r from-emerald-600 via-emerald-500 to-lime-400/80 text-white shadow-[0_12px_35px_rgba(16,185,129,0.18)] hover:brightness-100 hover:ring-1 hover:ring-emerald-200/40"
                         >
                           Join
                         </Button>
@@ -393,7 +393,7 @@ export default function SocialPage() {
                 required
                 className="border-white/10 bg-black/30 text-white placeholder:text-zinc-400 focus-visible:ring-emerald-400/60"
               />
-              <Button className="bg-emerald-500 text-white hover:bg-emerald-400">
+              <Button className="bg-gradient-to-r from-emerald-600 via-emerald-500 to-lime-400/80 text-white shadow-[0_12px_35px_rgba(16,185,129,0.18)] hover:brightness-100 hover:ring-1 hover:ring-emerald-200/40">
                 Join
               </Button>
             </form>
