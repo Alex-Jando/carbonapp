@@ -5,6 +5,7 @@ import {
   calculateFootprint,
   mapAnswersToFootprintInput,
 } from "../../../../footprint";
+import { buildQuestionnaireCompressionV1 } from "../../../../questionnaireCompression";
 import { QUESTIONNAIRE_V1 } from "../../../../questionnaire";
 import {
   AnswerValidationError,
@@ -115,11 +116,18 @@ export async function POST(request: Request) {
   const { calculatorInput, assumptions } =
     mapAnswersToFootprintInput(validAnswers);
   const footprint = calculateFootprint(calculatorInput);
+  const roundedFootprintKg = Math.round(footprint.totalKgPerYear);
+  const questionnaireCompression = buildQuestionnaireCompressionV1({
+    answers: validAnswers,
+    initialFootprintKg: roundedFootprintKg,
+    breakdown: footprint.breakdown,
+  });
 
   const adminDb = getAdminDb();
   await adminDb.collection("users").doc(decoded.uid).set(
     {
-      initialFootprintKg: Math.round(footprint.totalKgPerYear),
+      initialFootprintKg: roundedFootprintKg,
+      questionnaireCompression,
       updatedAt: getFieldValue().serverTimestamp()
     },
     { merge: true }
@@ -127,7 +135,7 @@ export async function POST(request: Request) {
 
   return NextResponse.json({
     ok: true,
-    initialFootprintKg: Math.round(footprint.totalKgPerYear),
+    initialFootprintKg: roundedFootprintKg,
     assumptions,
   });
 }

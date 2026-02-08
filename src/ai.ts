@@ -1,4 +1,5 @@
 import { dailyTasksSchema, type DailyTasksResponse } from "./schema";
+import type { QuestionnaireCompressionV1 } from "./questionnaireCompression";
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 // Cheapest Gemini model on OpenRouter that still gives solid output for structured tasks
@@ -20,6 +21,7 @@ type DailyTaskInput = {
     city?: string;
     initialFootprintKg?: number | null;
     carbonOffsetKgTotal?: number | null;
+    questionnaireCompression?: QuestionnaireCompressionV1 | null;
   };
   context?: {
     topActions?: Array<{
@@ -125,6 +127,8 @@ export async function generateDailyTasks(
             content:
               "You generate daily carbon-reduction tasks.\n" +
               "Return exactly 10 tasks for the next 24 hours.\n" +
+              "Use the user's questionnaireCompression profile (if present) to personalize tasks based on their habits and top emission area.\n" +
+              "Prioritize practical ways to offset the user's highest footprint drivers first.\n" +
               "Tasks must be low-effort, realistic, and require no major purchases.\n" +
               "Each title must start with a verb.\n" +
               "Set carbonOffsetKg between 1 and 10 for each task (optimistic is fine to motivate the user).\n" +

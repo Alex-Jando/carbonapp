@@ -135,7 +135,8 @@ export async function GET(request: Request) {
       email: userData.email,
       city: userData.city,
       initialFootprintKg: userData.initialFootprintKg ?? null,
-      carbonOffsetKgTotal: userData.carbonOffsetKgTotal ?? 0
+      carbonOffsetKgTotal: userData.carbonOffsetKgTotal ?? 0,
+      questionnaireCompression: userData.questionnaireCompression ?? null
     }
   });
 
