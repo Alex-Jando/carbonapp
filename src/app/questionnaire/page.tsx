@@ -192,6 +192,22 @@ export default function QuestionnairePage() {
     return true;
   }
 
+  function isQuestionAnswered(question: QuestionDef) {
+    if (!shouldShowQuestion(question.id)) return true;
+    const value = answers[question.id];
+    if (question.type === "number") {
+      if (value === undefined) return true;
+      return typeof value === "number" && Number.isFinite(value);
+    }
+    if (question.type === "boolean") {
+      return typeof value === "boolean";
+    }
+    if (question.type === "single") {
+      return typeof value === "string" && value.length > 0;
+    }
+    return false;
+  }
+
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
@@ -238,6 +254,17 @@ export default function QuestionnairePage() {
   const activeSection = SECTION_ORDER[activeIndex];
   const activeQuestions = sections.find(([key]) => key === activeSection)?.[1] ?? [];
   const completedSections = SECTION_ORDER.slice(0, activeIndex);
+  const activeShownQuestions = activeQuestions.filter((question) =>
+    shouldShowQuestion(question.id)
+  );
+  const activeRequiredComplete = activeShownQuestions.every((question) =>
+    isQuestionAnswered(question)
+  );
+  const allRequiredComplete = sections.every(([, questions]) =>
+    questions
+      .filter((question) => shouldShowQuestion(question.id))
+      .every((question) => isQuestionAnswered(question))
+  );
 
   return (
     <main className="min-h-dvh bg-zinc-950 text-zinc-50">
@@ -337,21 +364,35 @@ export default function QuestionnairePage() {
               <button
                 type="button"
                 onClick={() => setActiveIndex((prev) => Math.min(prev + 1, SECTION_ORDER.length - 1))}
-                className="rounded-full bg-emerald-400 px-6 py-2 text-sm font-semibold text-zinc-950"
+                disabled={!activeRequiredComplete}
+                className={`rounded-full px-6 py-2 text-sm font-semibold ${
+                  activeRequiredComplete
+                    ? "bg-emerald-400 text-zinc-950"
+                    : "bg-white/10 text-zinc-500"
+                }`}
               >
                 Next
               </button>
             ) : (
               <button
                 type="submit"
-                disabled={loading}
-                className="rounded-full bg-emerald-400 px-6 py-2 text-sm font-semibold text-zinc-950"
+                disabled={loading || !allRequiredComplete}
+                className={`rounded-full px-6 py-2 text-sm font-semibold ${
+                  loading || !allRequiredComplete
+                    ? "bg-white/10 text-zinc-500"
+                    : "bg-emerald-400 text-zinc-950"
+                }`}
               >
                 {loading ? "Submitting..." : "Submit Survey"}
               </button>
             )}
           </div>
 
+          {!allRequiredComplete ? (
+            <p className="text-sm text-amber-300">
+              Please answer all required questions before submitting.
+            </p>
+          ) : null}
           {error ? <p className="text-sm text-rose-300">{error}</p> : null}
         </form>
       </div>
@@ -370,6 +411,12 @@ function NumberSlider({
 }) {
   const range = rangeForQuestion(question.id, question.units);
   const displayValue = Number.isFinite(value) ? value : range.min;
+
+  useEffect(() => {
+    if (!Number.isFinite(value)) {
+      onChange(range.min);
+    }
+  }, [value, range.min, onChange]);
 
   return (
     <div className="mt-4 space-y-3">
