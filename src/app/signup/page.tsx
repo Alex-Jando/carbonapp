@@ -27,10 +27,28 @@ type AuthResponse = {
 const CITY_OPTIONS = [
   "Toronto",
   "Hamilton",
+  "Vancouver",
+  "Montreal",
+  "Calgary",
+  "Ottawa",
+  "Mississauga",
+  "Kitchener",
+  "Waterloo",
   "New York",
   "Chicago",
   "San Francisco",
-  "Vancouver"
+  "Los Angeles",
+  "Seattle",
+  "Boston",
+  "Austin",
+  "Miami",
+  "London",
+  "Paris",
+  "Berlin",
+  "Sydney",
+  "Tokyo",
+  "Singapore",
+  "Dubai",
 ];
 
 function prettyError(message?: string) {
@@ -45,9 +63,10 @@ export default function SignupPage() {
   const [username, setUsername] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [confirmPassword, setConfirmPassword] = React.useState("");
-  const [city, setCity] = React.useState(CITY_OPTIONS[0]);
+  const [city, setCity] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(false);
+  const [showCitySuggestions, setShowCitySuggestions] = React.useState(false);
 
   const canSubmit =
     email.trim().length > 3 &&
@@ -57,6 +76,14 @@ export default function SignupPage() {
     password === confirmPassword &&
     city.trim().length > 0 &&
     !loading;
+
+  const filteredCities = React.useMemo(() => {
+    const query = city.trim().toLowerCase();
+    if (!query) return [];
+    return CITY_OPTIONS.filter((option) =>
+      option.toLowerCase().includes(query)
+    ).slice(0, 8);
+  }, [city]);
 
   React.useEffect(() => {
     const idToken = localStorage.getItem("auth_id_token");
@@ -200,18 +227,42 @@ export default function SignupPage() {
                   <Label htmlFor="city" className="text-zinc-200">
                     City
                   </Label>
-                  <select
-                    id="city"
-                    value={city}
-                    onChange={(e) => setCity(e.target.value)}
-                    className="h-11 w-full rounded-md border border-white/10 bg-black/20 px-3 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-emerald-400/40"
-                  >
-                    {CITY_OPTIONS.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="relative space-y-1">
+                    <Input
+                      id="city"
+                      type="text"
+                      value={city}
+                      onChange={(e) => setCity(e.target.value)}
+                      onFocus={() => setShowCitySuggestions(true)}
+                      onBlur={() => {
+                        window.setTimeout(() => setShowCitySuggestions(false), 100);
+                      }}
+                      placeholder="Start typing to search..."
+                      required
+                      className="h-11 border-white/10 bg-black/20 text-zinc-100 placeholder:text-zinc-500 focus-visible:ring-emerald-400/40"
+                    />
+                    {showCitySuggestions && filteredCities.length > 0 ? (
+                      <div className="absolute left-0 right-0 z-10 mt-2 max-h-56 overflow-auto rounded-md border border-white/10 bg-zinc-950/95 p-1 shadow-[0_18px_50px_rgba(0,0,0,0.45)] backdrop-blur">
+                        {filteredCities.map((option) => (
+                          <button
+                            key={option}
+                            type="button"
+                            onMouseDown={(event) => {
+                              event.preventDefault();
+                              setCity(option);
+                              setShowCitySuggestions(false);
+                            }}
+                            className="w-full rounded-md px-3 py-2 text-left text-sm text-zinc-100 hover:bg-white/10"
+                          >
+                            {option}
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                    <p className="text-xs text-zinc-500">
+                      Select from the list or type your city.
+                    </p>
+                  </div>
                 </div>
 
                 <div className="space-y-2">

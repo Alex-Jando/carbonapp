@@ -288,6 +288,18 @@ export default function HomePage() {
     router.replace("/login");
   }
 
+  async function handleRedoQuestionnaire() {
+    const res = await fetchWithAuth("/api/questionnaire/reset", { method: "POST" });
+    if (!res) return;
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setError(data.error ?? "Failed to reset questionnaire.");
+      return;
+    }
+    setInitialFootprintKg(null);
+    router.push("/questionnaire");
+  }
+
   const todayLabel = new Date().toLocaleDateString("en-CA", {
     timeZone: "America/Toronto",
     weekday: "long",
@@ -377,6 +389,13 @@ export default function HomePage() {
               <p className="text-sm text-zinc-400">
                 Estimated from your questionnaire responses.
               </p>
+              <button
+                type="button"
+                onClick={handleRedoQuestionnaire}
+                className="mt-4 w-full rounded-full border border-emerald-400/30 bg-emerald-400/10 px-4 py-2 text-xs text-emerald-100 hover:border-emerald-300/60 hover:bg-emerald-400/15"
+              >
+                Redo questionnaire
+              </button>
             </div>
           </div>
         </div>
