@@ -192,7 +192,7 @@ export default function CommunityDetailPage() {
                     <p className="text-xs uppercase tracking-wide text-zinc-400">Avg Footprint</p>
                     <p className="mt-1 text-2xl font-semibold text-white">
                       {totals.avgFootprint !== null
-                        ? `${totals.avgFootprint.toFixed(0)} kg`
+                        ? `${totals.avgFootprint.toFixed(1)} kg`
                         : "N/A"}
                     </p>
                   </div>

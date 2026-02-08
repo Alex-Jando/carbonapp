@@ -15,6 +15,10 @@ type DailyTaskDoc = {
   createdAt: string;
 };
 
+function round1(value: number): number {
+  return Math.round(value * 10) / 10;
+}
+
 function getTorontoDateKey(date = new Date()): string {
   const formatter = new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Toronto",
@@ -150,7 +154,7 @@ export async function GET(request: Request) {
     tasks.push({
       id: taskId,
       title: task.title,
-      carbonOffsetKg: task.carbonOffsetKg,
+      carbonOffsetKg: round1(task.carbonOffsetKg),
       difficulty: task.difficulty,
       reason: task.reason,
       dateKey,

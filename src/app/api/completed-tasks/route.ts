@@ -99,7 +99,7 @@ export async function GET(request: Request) {
     return {
       id: doc.id,
       title: data.title ?? "Untitled task",
-      carbonOffsetKg: Number(data.carbonOffsetKg) || 0,
+      carbonOffsetKg: Math.round((Number(data.carbonOffsetKg) || 0) * 10) / 10,
       completedAt,
       username: data.username ?? "",
       userEmail: data.userEmail ?? null,

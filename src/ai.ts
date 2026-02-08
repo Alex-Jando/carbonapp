@@ -45,9 +45,13 @@ function extractJsonContent(raw: string): string {
   return trimmed;
 }
 
+function round1(value: number): number {
+  return Math.round(value * 10) / 10;
+}
+
 function clampTaskValue(value: number, min = 1, max = 10): number {
   if (!Number.isFinite(value)) return min;
-  return Math.min(Math.max(value, min), max);
+  return round1(Math.min(Math.max(value, min), max));
 }
 
 // JSON Schema for OpenRouter Structured Outputs (response_format: json_schema)

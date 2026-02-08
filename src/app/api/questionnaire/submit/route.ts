@@ -115,11 +115,12 @@ export async function POST(request: Request) {
   const { calculatorInput, assumptions } =
     mapAnswersToFootprintInput(validAnswers);
   const footprint = calculateFootprint(calculatorInput);
+  const initialFootprintKg = Math.round(footprint.totalKgPerYear * 10) / 10;
 
   const adminDb = getAdminDb();
   await adminDb.collection("users").doc(decoded.uid).set(
     {
-      initialFootprintKg: Math.round(footprint.totalKgPerYear),
+      initialFootprintKg,
       updatedAt: getFieldValue().serverTimestamp()
     },
     { merge: true }
@@ -127,7 +128,7 @@ export async function POST(request: Request) {
 
   return NextResponse.json({
     ok: true,
-    initialFootprintKg: Math.round(footprint.totalKgPerYear),
+    initialFootprintKg,
     assumptions,
   });
 }

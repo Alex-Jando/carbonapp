@@ -181,7 +181,7 @@ export default function FriendDetailPage() {
                       </p>
                       <p className="mt-1 text-2xl font-semibold text-white">
                         {profile.initialFootprintKg !== null
-                          ? `${profile.initialFootprintKg} kg`
+                          ? `${profile.initialFootprintKg.toFixed(1)} kg`
                           : "N/A"}
                       </p>
                       <p className="text-xs text-zinc-400">Estimated per year</p>
@@ -191,7 +191,7 @@ export default function FriendDetailPage() {
                         Carbon Offset
                       </p>
                       <p className="mt-1 text-2xl font-semibold text-white">
-                        {profile.carbonOffsetKgTotal} kg
+                        {profile.carbonOffsetKgTotal.toFixed(1)} kg
                       </p>
                       <p className="text-xs text-zinc-400">Total offset achieved</p>
                     </div>

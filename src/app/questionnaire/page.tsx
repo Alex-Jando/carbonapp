@@ -2,19 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { motion } from "framer-motion";
-
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/src/app/components/ui/card";
-import { Button } from "@/src/app/components/ui/button";
-import { Input } from "@/src/app/components/ui/input";
-import { Label } from "@/src/app/components/ui/label";
-import { Alert, AlertDescription } from "@/src/app/components/ui/alert";
-
 import { QUESTIONNAIRE_V1, QuestionDef } from "../../questionnaire";
 
 type AnswerValue = boolean | number | string;
@@ -30,48 +17,38 @@ type ProfileResponse = {
   error?: string;
 };
 
-function sectionTitle(section: string) {
-  if (section === "transportation") return "Transportation";
-  if (section === "home_energy") return "Home Energy";
-  if (section === "diet") return "Diet";
-  if (section === "consumption_habits") return "Consumption Habits";
-  if (section === "waste") return "Waste";
-  return section;
-}
+type SectionKey =
+  | "transportation"
+  | "home_energy"
+  | "diet"
+  | "consumption_habits"
+  | "waste";
 
-function splitOptionLabel(option: string): {
-  title: string;
-  description?: string;
-} {
-  const m = option.match(/^(.*?)\s*\((.*?)\)\s*$/);
-  if (!m) return { title: option };
-  const title = (m[1] ?? "").trim();
-  const description = (m[2] ?? "").trim();
-  return { title: title || option, description: description || undefined };
-}
+const SECTION_TITLES: Record<SectionKey, string> = {
+  transportation: "Transportation",
+  home_energy: "Home Energy",
+  diet: "Diet",
+  consumption_habits: "Consumption Habits",
+  waste: "Waste",
+};
 
-// If one option has a description, we ensure *all* options show a description line.
-// For options without (), we generate a neutral short descriptor.
-function normalizeOptions(
-  options: string[] | undefined,
-): Array<{ key: string; title: string; description: string }> {
-  const opts = options ?? [];
-  const split = opts.map((o) => ({ raw: o, ...splitOptionLabel(o) }));
-  const anyHasDesc = split.some((o) => !!o.description);
+const SECTION_ORDER: SectionKey[] = [
+  "transportation",
+  "home_energy",
+  "diet",
+  "consumption_habits",
+  "waste",
+];
 
-  return split.map((o) => {
-    if (anyHasDesc) {
-      // Generate a small neutral description if missing.
-      const desc =
-        o.description?.trim() ||
-        // lightweight, non-judgmental placeholder descriptor
-        "Tap to choose";
-      return { key: o.raw, title: o.title, description: desc };
-    }
-    // If none have descriptions, still keep a consistent two-line layout:
-    // Use an empty-ish line (non-breaking space) via a subtle placeholder.
-    return { key: o.raw, title: o.title, description: " " };
-  });
+function rangeForQuestion(id: string, units?: string) {
+  if (units === "days_per_week") return { min: 0, max: 7, step: 1 };
+  if (units === "trips_per_day") return { min: 0, max: 10, step: 1 };
+  if (units === "trips_per_month") return { min: 0, max: 40, step: 1 };
+  if (units === "round_trips_per_year") return { min: 0, max: 20, step: 1 };
+  if (units === "hours") return { min: 0, max: 20, step: 0.5 };
+  if (units === "miles_or_km_per_week") return { min: 0, max: 800, step: 5 };
+  if (id.includes("per_week")) return { min: 0, max: 100, step: 1 };
+  return { min: 0, max: 100, step: 1 };
 }
 
 export default function QuestionnairePage() {
@@ -79,6 +56,7 @@ export default function QuestionnairePage() {
   const [answers, setAnswers] = useState<Record<string, AnswerValue>>({});
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(0);
 
   function handleAuthFailure() {
     localStorage.removeItem("auth_id_token");
@@ -95,16 +73,15 @@ export default function QuestionnairePage() {
     }
 
     const loadProfile = async () => {
-      const res = await fetch(
-        `/api/profile?localId=${encodeURIComponent(localId)}`,
-        { headers: { Authorization: `Bearer ${idToken}` } },
-      );
+      const res = await fetch(`/api/profile?localId=${encodeURIComponent(localId)}`, {
+        headers: { Authorization: `Bearer ${idToken}` }
+      });
       if (res.status === 401) {
         handleAuthFailure();
         return;
       }
       const data = (await res.json()) as ProfileResponse;
-      if (res.ok && data.initialFootprintKg && data.initialFootprintKg > 0) {
+      if (res.ok && data.initialFootprintKg !== null && data.initialFootprintKg > 0) {
         router.replace("/home");
       }
     };
@@ -112,53 +89,117 @@ export default function QuestionnairePage() {
     void loadProfile();
   }, [router]);
 
+  useEffect(() => {
+    const updates: string[] = [];
+    if (answers["q_transport_car_own"] !== true) {
+      updates.push(
+        "q_transport_km_per_week",
+        "q_transport_fuel_type",
+        "q_transport_vehicle_age",
+        "q_transport_carpool_frequency"
+      );
+    }
+    const publicDays = answers["q_transport_public_transport_days_per_week"];
+    if (!(typeof publicDays === "number" && publicDays > 0)) {
+      updates.push("q_transport_public_transport_trips_per_day", "q_transport_public_transport_type");
+    }
+    const flightsPerYear = answers["q_transport_flights_per_year"];
+    if (!(typeof flightsPerYear === "number" && flightsPerYear > 0)) {
+      updates.push("q_transport_flight_duration_hours", "q_transport_flight_class");
+    }
+    const meatFrequency = answers["q_diet_meat_frequency"];
+    if (meatFrequency === "Never (vegetarian/vegan)") {
+      updates.push("q_diet_primary_meat_type");
+    }
+
+    if (updates.length > 0) {
+      setAnswers((prev) => {
+        const next = { ...prev };
+        for (const id of updates) {
+          delete next[id];
+        }
+        return next;
+      });
+    }
+  }, [
+    answers["q_transport_car_own"],
+    answers["q_transport_public_transport_days_per_week"],
+    answers["q_transport_flights_per_year"],
+    answers["q_diet_meat_frequency"]
+  ]);
+
   const sections = useMemo(() => {
     const map = new Map<string, QuestionDef[]>();
-    for (const q of QUESTIONNAIRE_V1.questions) {
-      if (!map.has(q.section)) map.set(q.section, []);
-      map.get(q.section)?.push(q);
+    for (const question of QUESTIONNAIRE_V1.questions) {
+      if (!map.has(question.section)) {
+        map.set(question.section, []);
+      }
+      map.get(question.section)?.push(question);
     }
-    return Array.from(map.entries());
+    return Array.from(map.entries()) as Array<[SectionKey, QuestionDef[]]>;
   }, []);
 
   function updateAnswer(id: string, value: AnswerValue | null) {
     setAnswers((prev) => {
       const next = { ...prev };
-      if (value === null || value === "") delete next[id];
-      else next[id] = value;
+      if (value === null || value === "") {
+        delete next[id];
+      } else {
+        next[id] = value;
+      }
       return next;
     });
   }
 
-  function validateAllQuestionsAnswered() {
-    const missing: string[] = [];
-    for (const q of QUESTIONNAIRE_V1.questions) {
-      const val = answers[q.id];
-      const hasValue =
-        val !== undefined &&
-        val !== null &&
-        !(typeof val === "string" && val.trim() === "");
-      if (!hasValue) missing.push(q.id);
+  function shouldShowQuestion(questionId: string) {
+    const carOwns = answers["q_transport_car_own"];
+    if (
+      (questionId === "q_transport_km_per_week" ||
+        questionId === "q_transport_fuel_type" ||
+        questionId === "q_transport_vehicle_age" ||
+        questionId === "q_transport_carpool_frequency") &&
+      carOwns !== true
+    ) {
+      return false;
     }
-    return missing;
+
+    const publicDays = answers["q_transport_public_transport_days_per_week"];
+    if (
+      (questionId === "q_transport_public_transport_trips_per_day" ||
+        questionId === "q_transport_public_transport_type") &&
+      !(typeof publicDays === "number" && publicDays > 0)
+    ) {
+      return false;
+    }
+
+    const flightsPerYear = answers["q_transport_flights_per_year"];
+    if (
+      (questionId === "q_transport_flight_duration_hours" ||
+        questionId === "q_transport_flight_class") &&
+      !(typeof flightsPerYear === "number" && flightsPerYear > 0)
+    ) {
+      return false;
+    }
+
+    const meatFrequency = answers["q_diet_meat_frequency"];
+    if (
+      questionId === "q_diet_primary_meat_type" &&
+      meatFrequency === "Never (vegetarian/vegan)"
+    ) {
+      return false;
+    }
+
+    return true;
   }
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
     setError(null);
-
-    const missing = validateAllQuestionsAnswered();
-    if (missing.length > 0) {
-      setError("Please answer all questions before submitting.");
-      const first = document.querySelector(`[data-qid="${missing[0]}"]`);
-      first?.scrollIntoView({ behavior: "smooth", block: "center" });
-      return;
-    }
-
     setLoading(true);
 
     const idToken = localStorage.getItem("auth_id_token");
-    if (!idToken) {
+    const localId = localStorage.getItem("auth_local_id");
+    if (!idToken || !localId) {
       router.replace("/login");
       return;
     }
@@ -168,19 +209,18 @@ export default function QuestionnairePage() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${idToken}`,
+          Authorization: `Bearer ${idToken}`
         },
         body: JSON.stringify({
           questionnaireVersion: "v1",
-          answers,
-        }),
+          answers
+        })
       });
 
       if (res.status === 401) {
         handleAuthFailure();
         return;
       }
-
       const data = (await res.json()) as SubmitResponse;
       if (!res.ok) {
         setError(data.error ?? "Failed to submit questionnaire.");
@@ -195,177 +235,204 @@ export default function QuestionnairePage() {
     }
   }
 
-  function ChoiceButton({
-    selected,
-    onClick,
-    title,
-    description,
-  }: {
-    selected: boolean;
-    onClick: () => void;
-    title: string;
-    description: string; // always present for consistent height
-  }) {
-    return (
-      <button
-        type="button"
-        onClick={onClick}
-        aria-pressed={selected}
-        className={[
-          // sizing: consistent height/width
-          "w-full sm:w-[240px] md:w-[260px] lg:w-[280px]",
-          "min-h-[64px]",
-          "rounded-xl border px-4 py-3 text-left transition",
-          "focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60",
-          "whitespace-normal",
-          selected
-            ? "border-emerald-400/55 bg-emerald-500/18 text-white shadow-[0_0_0_1px_rgba(16,185,129,0.18)]"
-            : "border-white/10 bg-black/30 text-zinc-200 hover:border-white/20 hover:bg-black/40",
-        ].join(" ")}
-      >
-        <div className="flex h-full flex-col justify-center">
-          <div className="font-medium leading-tight text-white">{title}</div>
-          <div className="mt-1 text-xs leading-snug text-zinc-400">
-            {description}
-          </div>
-        </div>
-      </button>
-    );
-  }
+  const activeSection = SECTION_ORDER[activeIndex];
+  const activeQuestions = sections.find(([key]) => key === activeSection)?.[1] ?? [];
+  const completedSections = SECTION_ORDER.slice(0, activeIndex);
 
   return (
-    <main className="relative min-h-dvh bg-zinc-950 text-white">
-      {/* 🌿 Strong green ambience */}
-      <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute -top-40 left-1/2 h-[560px] w-[560px] -translate-x-1/2 rounded-full bg-emerald-500/30 blur-3xl" />
-        <div className="absolute -bottom-48 right-[-140px] h-[520px] w-[520px] rounded-full bg-lime-400/20 blur-3xl" />
-        <div className="absolute inset-0 bg-[radial-gradient(900px_500px_at_50%_20%,rgba(16,185,129,0.22),transparent_55%)]" />
-      </div>
+    <main className="min-h-dvh bg-zinc-950 text-zinc-50">
+      <div className="mx-auto flex w-full max-w-5xl flex-col gap-8 px-4 py-10">
+        <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-6">
+          <p className="text-xs uppercase tracking-[0.3em] text-emerald-200/70">
+            Initial Assessment
+          </p>
+          <h1 className="mt-2 text-3xl font-semibold">Carbon Footprint Survey</h1>
+          <p className="mt-2 text-sm text-zinc-400">
+            Answer a few quick questions to personalize your daily tasks.
+          </p>
+        </div>
 
-      <div className="relative z-10 mx-auto max-w-3xl px-4 py-10">
-        <motion.h1
-          initial={{ opacity: 0, y: 14 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-3 text-3xl font-semibold tracking-tight"
-        >
-          Initial Carbon Footprint
-        </motion.h1>
+        <div className="flex flex-wrap gap-3">
+          {SECTION_ORDER.map((section, index) => {
+            const isActive = index === activeIndex;
+            const isDone = completedSections.includes(section);
+            return (
+              <button
+                type="button"
+                key={section}
+                onClick={() => setActiveIndex(index)}
+                className={`rounded-full px-4 py-2 text-xs font-semibold transition ${
+                  isActive
+                    ? "bg-emerald-400 text-zinc-950"
+                    : isDone
+                    ? "border border-emerald-400/40 text-emerald-200"
+                    : "border border-white/10 text-zinc-400"
+                }`}
+              >
+                {SECTION_TITLES[section]}
+              </button>
+            );
+          })}
+        </div>
 
-        <p className="mb-8 text-zinc-300">
-          Please complete this questionnaire before continuing.
-        </p>
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-semibold text-white">
+                  {SECTION_TITLES[activeSection]}
+                </h2>
+                <p className="text-sm text-zinc-400">
+                  Step {activeIndex + 1} of {SECTION_ORDER.length}
+                </p>
+              </div>
+              <div className="text-xs text-zinc-400">
+                {Math.round(((activeIndex + 1) / SECTION_ORDER.length) * 100)}%
+              </div>
+            </div>
 
-        {error ? (
-          <Alert className="mb-6 border-rose-500/40 bg-rose-500/15 text-white">
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        ) : null}
+            <div className="mt-6 space-y-6">
+              {activeQuestions.map((question) =>
+                shouldShowQuestion(question.id) ? (
+                  <div key={question.id} className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                    <p className="text-sm font-semibold text-white">{question.prompt}</p>
+                    {question.type === "number" ? (
+                      <NumberSlider
+                        question={question}
+                        value={typeof answers[question.id] === "number" ? (answers[question.id] as number) : 0}
+                        onChange={(value) => updateAnswer(question.id, value)}
+                      />
+                    ) : null}
+                    {question.type === "boolean" ? (
+                      <OptionButtons
+                        options={["Yes", "No"]}
+                        value={answers[question.id] === true ? "Yes" : answers[question.id] === false ? "No" : null}
+                        onChange={(value) =>
+                          updateAnswer(question.id, value === "Yes" ? true : false)
+                        }
+                      />
+                    ) : null}
+                    {question.type === "single" ? (
+                      <OptionButtons
+                        options={question.options ?? []}
+                        value={typeof answers[question.id] === "string" ? (answers[question.id] as string) : null}
+                        onChange={(value) => updateAnswer(question.id, value)}
+                      />
+                    ) : null}
+                  </div>
+                ) : null
+              )}
+            </div>
+          </div>
 
-        <form onSubmit={handleSubmit} className="space-y-8">
-          {sections.map(([section, questions]) => (
-            <Card
-              key={section}
-              className="border-white/10 bg-white/[0.06] backdrop-blur"
+          <div className="flex items-center justify-between">
+            <button
+              type="button"
+              onClick={() => setActiveIndex((prev) => Math.max(prev - 1, 0))}
+              className="rounded-full border border-white/10 px-4 py-2 text-sm text-zinc-300"
             >
-              <CardHeader>
-                <CardTitle className="text-white text-2xl">
-                  {sectionTitle(section)}
-                </CardTitle>
-              </CardHeader>
+              Back
+            </button>
+            {activeIndex < SECTION_ORDER.length - 1 ? (
+              <button
+                type="button"
+                onClick={() => setActiveIndex((prev) => Math.min(prev + 1, SECTION_ORDER.length - 1))}
+                className="rounded-full bg-emerald-400 px-6 py-2 text-sm font-semibold text-zinc-950"
+              >
+                Next
+              </button>
+            ) : (
+              <button
+                type="submit"
+                disabled={loading}
+                className="rounded-full bg-emerald-400 px-6 py-2 text-sm font-semibold text-zinc-950"
+              >
+                {loading ? "Submitting..." : "Submit Survey"}
+              </button>
+            )}
+          </div>
 
-              <CardContent className="space-y-10">
-                {questions.map((q) => {
-                  const current = answers[q.id];
-
-                  return (
-                    <div key={q.id} data-qid={q.id} className="space-y-5">
-                      <Label className="block text-zinc-200 text-lg">
-                        {q.prompt}
-                      </Label>
-
-                      {/* NUMBER: always controlled */}
-                      {q.type === "number"
-                        ? (() => {
-                            const inputValue =
-                              typeof current === "number" &&
-                              Number.isFinite(current)
-                                ? String(current)
-                                : "";
-
-                            return (
-                              <div className="mt-1">
-                                <Input
-                                  type="number"
-                                  step="any"
-                                  inputMode="decimal"
-                                  value={inputValue}
-                                  onChange={(e) => {
-                                    const raw = e.target.value;
-                                    if (raw === "") {
-                                      updateAnswer(q.id, null);
-                                      return;
-                                    }
-                                    const n = Number(raw);
-                                    updateAnswer(
-                                      q.id,
-                                      Number.isFinite(n) ? n : null,
-                                    );
-                                  }}
-                                  className="h-12 border-white/10 bg-black/30 text-white text-lg placeholder:text-zinc-400 focus-visible:ring-emerald-400/60"
-                                />
-                              </div>
-                            );
-                          })()
-                        : null}
-
-                      {/* BOOLEAN: consistent height, consistent width, centered layout */}
-                      {q.type === "boolean" ? (
-                        <div className="flex flex-wrap justify-center gap-3">
-                          <ChoiceButton
-                            selected={current === true}
-                            onClick={() => updateAnswer(q.id, true)}
-                            title="Yes"
-                            description="Confirm this applies"
-                          />
-                          <ChoiceButton
-                            selected={current === false}
-                            onClick={() => updateAnswer(q.id, false)}
-                            title="No"
-                            description="Does not apply"
-                          />
-                        </div>
-                      ) : null}
-
-                      {/* SINGLE: neat, same-sized options, centered */}
-                      {q.type === "single" ? (
-                        <div className="flex flex-wrap justify-center gap-3">
-                          {normalizeOptions(q.options).map((opt) => (
-                            <ChoiceButton
-                              key={opt.key}
-                              selected={current === opt.key}
-                              onClick={() => updateAnswer(q.id, opt.key)}
-                              title={opt.title}
-                              description={opt.description}
-                            />
-                          ))}
-                        </div>
-                      ) : null}
-                    </div>
-                  );
-                })}
-              </CardContent>
-            </Card>
-          ))}
-
-          <Button
-            type="submit"
-            disabled={loading}
-            className="h-12 w-full bg-gradient-to-r from-emerald-400 to-lime-300 text-white shadow-[0_18px_55px_rgba(16,185,129,0.28)] hover:brightness-105"
-          >
-            {loading ? "Submitting..." : "Submit Questionnaire"}
-          </Button>
+          {error ? <p className="text-sm text-rose-300">{error}</p> : null}
         </form>
       </div>
     </main>
+  );
+}
+
+function NumberSlider({
+  question,
+  value,
+  onChange,
+}: {
+  question: QuestionDef;
+  value: number;
+  onChange: (value: number) => void;
+}) {
+  const range = rangeForQuestion(question.id, question.units);
+  const displayValue = Number.isFinite(value) ? value : range.min;
+
+  return (
+    <div className="mt-4 space-y-3">
+      <div className="flex items-center justify-between text-xs text-zinc-400">
+        <span>{range.min}</span>
+        <span className="rounded-full bg-white/10 px-3 py-1 text-sm text-white">
+          {displayValue}
+        </span>
+        <span>{range.max}</span>
+      </div>
+      <input
+        type="range"
+        min={range.min}
+        max={range.max}
+        step={range.step}
+        value={displayValue}
+        onChange={(event) => onChange(Number(event.target.value))}
+        className="slider-orb"
+      />
+      <div className="flex items-center gap-2 text-xs text-zinc-400">
+        <span>Exact value:</span>
+        <input
+          type="number"
+          min={range.min}
+          max={range.max}
+          step={range.step}
+          value={displayValue}
+          onChange={(event) => onChange(Number(event.target.value))}
+          className="w-24 rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-xs text-zinc-100"
+        />
+      </div>
+    </div>
+  );
+}
+
+function OptionButtons({
+  options,
+  value,
+  onChange,
+}: {
+  options: string[];
+  value: string | null;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="mt-4 flex flex-wrap gap-2">
+      {options.map((option) => {
+        const active = option === value;
+        return (
+          <button
+            key={option}
+            type="button"
+            onClick={() => onChange(option)}
+            className={`rounded-full px-4 py-2 text-xs font-semibold transition ${
+              active
+                ? "bg-emerald-400 text-zinc-950"
+                : "border border-white/10 text-zinc-300 hover:border-emerald-400/40"
+            }`}
+          >
+            {option}
+          </button>
+        );
+      })}
+    </div>
   );
 }

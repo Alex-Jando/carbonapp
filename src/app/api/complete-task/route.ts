@@ -64,6 +64,10 @@ function getFieldValue() {
   return admin.firestore.FieldValue;
 }
 
+function round1(value: number): number {
+  return Math.round(value * 10) / 10;
+}
+
 function getBearerToken(request: Request): string | null {
   const authHeader = request.headers.get("authorization") ?? "";
   const match = authHeader.match(/^Bearer (.+)$/i);
@@ -146,7 +150,7 @@ export async function POST(request: Request) {
       }
 
       const taskData = dailyTasks[taskIndex];
-      carbonOffsetKg = Number(taskData.carbonOffsetKg) || 0;
+      carbonOffsetKg = round1(Number(taskData.carbonOffsetKg) || 0);
       const dateKey = String(taskData.dateKey || getTorontoDateKey());
       const yesterdayKey = getTorontoDateKeyOffset(-1);
 
@@ -188,7 +192,7 @@ export async function POST(request: Request) {
       const currentDailyCarbonOffset =
         Number(dailyStatsData.carbonOffsetKg) || 0;
       const newDailyTasksCompleted = currentDailyTasksCompleted + 1;
-      const newDailyCarbonOffset = currentDailyCarbonOffset + carbonOffsetKg;
+      const newDailyCarbonOffset = round1(currentDailyCarbonOffset + carbonOffsetKg);
 
       nextDailyStats = {
         dateKey,

@@ -43,8 +43,10 @@ export async function GET(request: Request) {
   const initialFootprintKgField = fields.initialFootprintKg ?? null;
 
   let initialFootprintKg: number | null = null;
-  if (initialFootprintKgField?.integerValue) {
-    const parsed = Number(initialFootprintKgField.integerValue);
+  if (initialFootprintKgField?.integerValue || initialFootprintKgField?.doubleValue) {
+    const parsed = Number(
+      initialFootprintKgField.doubleValue ?? initialFootprintKgField.integerValue
+    );
     initialFootprintKg = Number.isFinite(parsed) ? parsed : null;
   }
 
@@ -53,4 +55,3 @@ export async function GET(request: Request) {
     initialFootprintKg,
   });
 }
-

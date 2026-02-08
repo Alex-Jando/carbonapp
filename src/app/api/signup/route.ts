@@ -62,7 +62,7 @@ export async function POST(request: Request) {
       friends: { arrayValue: { values: [] } },
       communities: { arrayValue: { values: [] } },
       initialFootprintKg: { nullValue: null },
-      carbonOffsetKgTotal: { integerValue: "0" },
+      carbonOffsetKgTotal: { doubleValue: 0.0 },
       dailyTasks: { arrayValue: { values: [] } },
       completedTaskIds: { arrayValue: { values: [] } },
       tasksCompletedCount: { integerValue: "0" },
