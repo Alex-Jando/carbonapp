@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { QUESTIONNAIRE_V1, QuestionDef } from "../../questionnaire";
+import { AppLogo } from "@/src/components/brand/AppLogo";
 
 type AnswerValue = boolean | number | string;
 
@@ -270,10 +271,16 @@ export default function QuestionnairePage() {
     <main className="min-h-dvh bg-zinc-950 text-zinc-50">
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-8 px-4 py-10">
         <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-6">
-          <p className="text-xs uppercase tracking-[0.3em] text-emerald-200/70">
-            Initial Assessment
-          </p>
-          <h1 className="mt-2 text-3xl font-semibold">Carbon Footprint Survey</h1>
+          <div className="flex items-center gap-3">
+            <AppLogo
+              size={38}
+              imageClassName="drop-shadow-[0_14px_24px_rgba(16,185,129,0.2)]"
+            />
+            <p className="text-xs uppercase tracking-[0.3em] text-emerald-200/70">
+              Initial Assessment
+            </p>
+          </div>
+          <h1 className="mt-3 text-3xl font-semibold">Carbon Footprint Survey</h1>
           <p className="mt-2 text-sm text-zinc-400">
             Answer a few quick questions to personalize your daily tasks.
           </p>
@@ -290,7 +297,7 @@ export default function QuestionnairePage() {
                 onClick={() => setActiveIndex(index)}
                 className={`rounded-full px-4 py-2 text-xs font-semibold transition ${
                   isActive
-                    ? "bg-emerald-400 text-zinc-950"
+                    ? "bg-emerald-400 text-white"
                     : isDone
                     ? "border border-emerald-400/40 text-emerald-200"
                     : "border border-white/10 text-zinc-400"
@@ -367,7 +374,7 @@ export default function QuestionnairePage() {
                 disabled={!activeRequiredComplete}
                 className={`rounded-full px-6 py-2 text-sm font-semibold ${
                   activeRequiredComplete
-                    ? "bg-emerald-400 text-zinc-950"
+                    ? "bg-emerald-400 text-white"
                     : "bg-white/10 text-zinc-500"
                 }`}
               >
@@ -380,7 +387,7 @@ export default function QuestionnairePage() {
                 className={`rounded-full px-6 py-2 text-sm font-semibold ${
                   loading || !allRequiredComplete
                     ? "bg-white/10 text-zinc-500"
-                    : "bg-emerald-400 text-zinc-950"
+                    : "bg-emerald-400 text-white"
                 }`}
               >
                 {loading ? "Submitting..." : "Submit Survey"}
@@ -472,7 +479,7 @@ function OptionButtons({
             onClick={() => onChange(option)}
             className={`rounded-full px-4 py-2 text-xs font-semibold transition ${
               active
-                ? "bg-emerald-400 text-zinc-950"
+                ? "bg-emerald-400 text-white"
                 : "border border-white/10 text-zinc-300 hover:border-emerald-400/40"
             }`}
           >

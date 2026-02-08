@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
+import { AppLogo } from "@/src/components/brand/AppLogo";
 
 import {
   Card,
@@ -112,9 +113,12 @@ export default function LoginPage() {
           <Card className="border-white/10 bg-white/[0.06] backdrop-blur-xl shadow-[0_20px_70px_rgba(0,0,0,0.55)]">
             <CardHeader className="space-y-2">
               <div className="flex items-center gap-3">
-                <div className="h-11 w-11 rounded-2xl bg-gradient-to-br from-emerald-400/90 to-lime-300/80 shadow-[0_16px_35px_rgba(16,185,129,0.18)]" />
+                <AppLogo
+                  size={44}
+                  imageClassName="drop-shadow-[0_16px_28px_rgba(16,185,129,0.24)]"
+                />
                 <div>
-                  <CardTitle className="text-2xl tracking-tight">
+                  <CardTitle className="text-2xl tracking-tight text-white">
                     Welcome back
                   </CardTitle>
                   <CardDescription className="text-zinc-300">
@@ -187,7 +191,7 @@ export default function LoginPage() {
                 <Button
                   type="submit"
                   disabled={!canSubmit}
-                  className="relative h-11 w-full overflow-hidden bg-gradient-to-r from-emerald-400 to-lime-300 text-zinc-950 shadow-[0_18px_55px_rgba(16,185,129,0.22)] hover:brightness-105 active:brightness-95"
+                  className="relative h-11 w-full overflow-hidden bg-gradient-to-r from-emerald-400 to-lime-300 text-white shadow-[0_18px_55px_rgba(16,185,129,0.22)] hover:brightness-105 active:brightness-95"
                 >
                   <motion.span
                     whileTap={{ scale: 0.985 }}

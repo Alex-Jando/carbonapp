@@ -68,7 +68,7 @@ export function DailyTasksCard({
               <button
                 type="button"
                 onClick={() => onComplete(task.id)}
-                className="rounded-full bg-emerald-400 px-4 py-2 text-xs font-semibold text-zinc-900 hover:brightness-105"
+                className="rounded-full bg-emerald-400 px-4 py-2 text-xs font-semibold text-white hover:brightness-105"
               >
                 Complete
               </button>
