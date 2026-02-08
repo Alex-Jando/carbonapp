@@ -366,6 +366,18 @@ export default function HomePage() {
                 </p>
               </div>
             )}
+
+            <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-6 shadow-[0_18px_60px_rgba(0,0,0,0.35)]">
+              <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/70">
+                Estimated Footprint
+              </p>
+              <p className="mt-2 text-3xl font-semibold text-white">
+                {initialFootprintKg.toFixed(0)} kg/year
+              </p>
+              <p className="text-sm text-zinc-400">
+                Estimated from your questionnaire responses.
+              </p>
+            </div>
           </div>
         </div>
 
