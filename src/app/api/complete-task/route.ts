@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import admin from "firebase-admin";
-import { readFileSync } from "fs";
 import { completeTaskRequestSchema } from "../../../schema";
 
 export const runtime = "nodejs";
@@ -24,13 +23,37 @@ function getTorontoDateKeyOffset(days: number): string {
 function resolveServiceAccount() {
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
   if (!raw) return null;
-  const trimmed = raw.trim();
-  if (trimmed.startsWith("{")) {
-    return JSON.parse(trimmed);
-  }
+
+  const unwrap = (value: string) => {
+    const trimmed = value.trim();
+    if ((trimmed.startsWith("'") && trimmed.endsWith("'")) ||
+        (trimmed.startsWith("\"") && trimmed.endsWith("\""))) {
+      return trimmed.slice(1, -1);
+    }
+    return trimmed;
+  };
+
+  const parseJson = (value: string) => {
+    const parsed = JSON.parse(value);
+    if (parsed && typeof parsed.private_key === "string") {
+      parsed.private_key = parsed.private_key.replace(/\\n/g, "\n");
+    }
+    return parsed;
+  };
+
+  const unwrapped = unwrap(raw);
+
   try {
-    const fileContent = readFileSync(trimmed, "utf-8");
-    return JSON.parse(fileContent);
+    if (unwrapped.startsWith("{")) {
+      return parseJson(unwrapped);
+    }
+  } catch {
+    // ignore and try base64
+  }
+
+  try {
+    const decoded = Buffer.from(unwrapped, "base64").toString("utf-8");
+    return parseJson(decoded);
   } catch {
     return null;
   }
@@ -39,13 +62,23 @@ function resolveServiceAccount() {
 function getAdminApp() {
   if (!admin.apps.length) {
     const serviceAccount = resolveServiceAccount();
+    const projectId =
+      serviceAccount?.project_id ??
+      process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ??
+      process.env.FIREBASE_PROJECT_ID;
     if (serviceAccount) {
       admin.initializeApp({
         credential: admin.credential.cert(serviceAccount),
+        projectId
+      });
+    } else if (projectId) {
+      admin.initializeApp({
+        credential: admin.credential.applicationDefault(),
+        projectId
       });
     } else {
       admin.initializeApp({
-        credential: admin.credential.applicationDefault(),
+        credential: admin.credential.applicationDefault()
       });
     }
   }
@@ -68,6 +101,10 @@ function getBearerToken(request: Request): string | null {
   const authHeader = request.headers.get("authorization") ?? "";
   const match = authHeader.match(/^Bearer (.+)$/i);
   return match ? match[1] : null;
+}
+
+function round1(value: number): number {
+  return Math.round(value * 10) / 10;
 }
 
 export async function POST(request: Request) {
@@ -125,176 +162,181 @@ export async function POST(request: Request) {
     carbonOffsetKg: number;
   } | null = null;
 
-  try {
-    await adminDb.runTransaction(async (transaction) => {
-      const userSnap = await transaction.get(userRef);
-      if (!userSnap.exists) {
-        throw new Error("USER_NOT_FOUND");
-      }
+  async function runTransactionWithRetry(retries: number) {
+    let lastError: unknown = null;
+    for (let attempt = 0; attempt <= retries; attempt += 1) {
+      try {
+        await adminDb.runTransaction(async (transaction) => {
+          const userSnap = await transaction.get(userRef);
+          if (!userSnap.exists) {
+            throw new Error("USER_NOT_FOUND");
+          }
 
-      const userData = userSnap.data() ?? {};
-      const rawDailyTasks = Array.isArray(userData.dailyTasks)
-        ? userData.dailyTasks
-        : [];
-      const dailyTasks: Array<Record<string, unknown>> = rawDailyTasks.filter(
-        (task) => task && typeof task === "object" && "id" in task,
-      ) as Array<Record<string, unknown>>;
+          const userData = userSnap.data() ?? {};
+          const rawDailyTasks = Array.isArray(userData.dailyTasks)
+            ? userData.dailyTasks
+            : [];
+          const dailyTasks: Array<Record<string, unknown>> =
+            rawDailyTasks.filter(
+              (task) => task && typeof task === "object" && "id" in task,
+            ) as Array<Record<string, unknown>>;
 
-      const taskIndex = dailyTasks.findIndex((task) => task.id === dailyTaskId);
-      if (taskIndex === -1) {
-        throw new Error("DAILY_TASK_NOT_FOUND");
-      }
+          const taskIndex = dailyTasks.findIndex(
+            (task) => task.id === dailyTaskId,
+          );
+          if (taskIndex === -1) {
+            throw new Error("DAILY_TASK_NOT_FOUND");
+          }
 
-      const taskData = dailyTasks[taskIndex];
-      carbonOffsetKg = Number(taskData.carbonOffsetKg) || 0;
-      const dateKey = String(taskData.dateKey || getTorontoDateKey());
-      const yesterdayKey = getTorontoDateKeyOffset(-1);
+          const taskData = dailyTasks[taskIndex];
+          carbonOffsetKg = round1(Number(taskData.carbonOffsetKg) || 0);
+          const dateKey = String(taskData.dateKey || getTorontoDateKey());
+          const yesterdayKey = getTorontoDateKeyOffset(-1);
 
-      const completedRef = completedTasksRef.doc();
-      completedTaskId = completedRef.id;
+          const completedRef = completedTasksRef.doc();
+          completedTaskId = completedRef.id;
 
-      const currentCarbonOffsetTotal =
-        Number(userData.carbonOffsetKgTotal) || 0;
-      const currentTasksCompletedCount =
-        Number(userData.tasksCompletedCount) || 0;
-      const currentStreak = Number(userData.streakCurrent) || 0;
-      const currentBest = Number(userData.streakBest) || 0;
-      const lastCompletion = userData.lastCompletionDateKey ?? null;
+          const currentCarbonOffsetTotal =
+            Number(userData.carbonOffsetKgTotal) || 0;
+          const currentTasksCompletedCount =
+            Number(userData.tasksCompletedCount) || 0;
+          const currentStreak = Number(userData.streakCurrent) || 0;
+          const currentBest = Number(userData.streakBest) || 0;
+          const lastCompletion = userData.lastCompletionDateKey ?? null;
 
-      if (lastCompletion === dateKey) {
-        nextStreakCurrent = currentStreak || 1;
-      } else if (lastCompletion === yesterdayKey) {
-        nextStreakCurrent = currentStreak + 1;
-      } else {
-        nextStreakCurrent = 1;
-      }
-      nextStreakBest = Math.max(currentBest, nextStreakCurrent);
-      nextLastCompletionDateKey = dateKey;
+          if (lastCompletion === dateKey) {
+            nextStreakCurrent = currentStreak || 1;
+          } else if (lastCompletion === yesterdayKey) {
+            nextStreakCurrent = currentStreak + 1;
+          } else {
+            nextStreakCurrent = 1;
+          }
+          nextStreakBest = Math.max(currentBest, nextStreakCurrent);
+          nextLastCompletionDateKey = dateKey;
 
-      nextTasksCompletedCount = currentTasksCompletedCount + 1;
-      nextCarbonOffsetTotal = currentCarbonOffsetTotal + carbonOffsetKg;
+          nextTasksCompletedCount = currentTasksCompletedCount + 1;
+          nextCarbonOffsetTotal = round1(
+            currentCarbonOffsetTotal + carbonOffsetKg,
+          );
 
-      const updatedDailyTasks = dailyTasks.filter(
-        (task) => task.id !== dailyTaskId,
-      );
+          const updatedDailyTasks = dailyTasks.filter(
+            (task) => task.id !== dailyTaskId,
+          );
 
-      const dailyStatsRef = userRef.collection("dailyStats").doc(dateKey);
-      const dailyStatsSnap = await transaction.get(dailyStatsRef);
-      const dailyStatsData = dailyStatsSnap.exists
-        ? (dailyStatsSnap.data() ?? {})
-        : {};
-      const currentDailyTasksCompleted =
-        Number(dailyStatsData.tasksCompleted) || 0;
-      const currentDailyCarbonOffset =
-        Number(dailyStatsData.carbonOffsetKg) || 0;
-      const newDailyTasksCompleted = currentDailyTasksCompleted + 1;
-      const newDailyCarbonOffset = currentDailyCarbonOffset + carbonOffsetKg;
+          const dailyStatsRef = userRef.collection("dailyStats").doc(dateKey);
+          const dailyStatsSnap = await transaction.get(dailyStatsRef);
+          const dailyStatsData = dailyStatsSnap.exists
+            ? (dailyStatsSnap.data() ?? {})
+            : {};
+          const currentDailyTasksCompleted =
+            Number(dailyStatsData.tasksCompleted) || 0;
+          const currentDailyCarbonOffset =
+            Number(dailyStatsData.carbonOffsetKg) || 0;
+          const newDailyTasksCompleted = currentDailyTasksCompleted + 1;
+          const newDailyCarbonOffset = round1(
+            currentDailyCarbonOffset + carbonOffsetKg,
+          );
 
-      nextDailyStats = {
-        dateKey,
-        tasksCompleted: newDailyTasksCompleted,
-        carbonOffsetKg: newDailyCarbonOffset,
-      };
+          nextDailyStats = {
+            dateKey,
+            tasksCompleted: newDailyTasksCompleted,
+            carbonOffsetKg: newDailyCarbonOffset,
+          };
 
-      const communityId =
-        Array.isArray(userData.communities) && userData.communities.length > 0
-          ? String(userData.communities[0])
-          : null;
-      let communityName: string | null = null;
-      if (communityId) {
-        const communitySnap = await transaction.get(
-          adminDb.collection("communities").doc(communityId),
-        );
-        if (communitySnap.exists) {
-          const communityData = communitySnap.data() ?? {};
-          communityName =
-            typeof communityData.name === "string" ? communityData.name : null;
-        }
-      }
+          const completedPayload = {
+            uid,
+            username: String(userData.username ?? ""),
+            userEmail:
+              typeof userData.email === "string" ? userData.email : null,
+            title: taskData.title ?? "Untitled task",
+            carbonOffsetKg,
+            imageUrl: imageUrl ?? null,
+            dateKey,
+            completedAt: getFieldValue().serverTimestamp(),
+            sourceDailyTaskId: dailyTaskId,
+          };
 
-      const completedPayload = {
-        uid,
-        username: String(userData.username ?? ""),
-        userEmail: typeof userData.email === "string" ? userData.email : null,
-        communityId,
-        communityName,
-        title: taskData.title ?? "Untitled task",
-        carbonOffsetKg,
-        imageUrl: imageUrl ?? null,
-        dateKey,
-        completedAt: getFieldValue().serverTimestamp(),
-        sourceDailyTaskId: dailyTaskId,
-      };
-
-      const userCompletedRef = userRef
-        .collection("completedTasks")
-        .doc(completedTaskId);
-      const communityCompletedRef = communityId
-        ? adminDb
-            .collection("communities")
-            .doc(communityId)
+          const userCompletedRef = userRef
             .collection("completedTasks")
-            .doc(completedTaskId)
-        : null;
+            .doc(completedTaskId);
 
-      transaction.set(
-        dailyStatsRef,
-        {
-          dateKey,
-          tasksCompleted: getFieldValue().increment(1),
-          carbonOffsetKg: getFieldValue().increment(carbonOffsetKg),
-          updatedAt: getFieldValue().serverTimestamp(),
-        },
-        { merge: true },
-      );
+          transaction.set(
+            dailyStatsRef,
+            {
+              dateKey,
+              tasksCompleted: getFieldValue().increment(1),
+              carbonOffsetKg: getFieldValue().increment(carbonOffsetKg),
+              updatedAt: getFieldValue().serverTimestamp(),
+            },
+            { merge: true },
+          );
 
-      const globalDailyRef = globalDailyStatsRef.doc(dateKey);
-      transaction.set(
-        globalDailyRef,
-        {
-          dateKey,
-          tasksCompleted: getFieldValue().increment(1),
-          carbonOffsetKg: getFieldValue().increment(carbonOffsetKg),
-          updatedAt: getFieldValue().serverTimestamp(),
-        },
-        { merge: true },
-      );
+          const globalDailyRef = globalDailyStatsRef.doc(dateKey);
+          transaction.set(
+            globalDailyRef,
+            {
+              dateKey,
+              tasksCompleted: getFieldValue().increment(1),
+              carbonOffsetKg: getFieldValue().increment(carbonOffsetKg),
+              updatedAt: getFieldValue().serverTimestamp(),
+            },
+            { merge: true },
+          );
 
-      transaction.set(
-        globalTotalsRef,
-        {
-          tasksCompleted: getFieldValue().increment(1),
-          carbonOffsetKg: getFieldValue().increment(carbonOffsetKg),
-          updatedAt: getFieldValue().serverTimestamp(),
-        },
-        { merge: true },
-      );
+          transaction.set(
+            globalTotalsRef,
+            {
+              tasksCompleted: getFieldValue().increment(1),
+              carbonOffsetKg: getFieldValue().increment(carbonOffsetKg),
+              updatedAt: getFieldValue().serverTimestamp(),
+            },
+            { merge: true },
+          );
 
-      transaction.set(completedRef, completedPayload);
-      transaction.set(userCompletedRef, completedPayload);
-      if (communityCompletedRef) {
-        transaction.set(communityCompletedRef, completedPayload);
+          transaction.set(completedRef, completedPayload);
+          transaction.set(userCompletedRef, completedPayload);
+
+          transaction.set(
+            userRef,
+            {
+              dailyTasks: updatedDailyTasks,
+              completedTaskIds: getFieldValue().arrayUnion(completedTaskId),
+              carbonOffsetKgTotal: getFieldValue().increment(carbonOffsetKg),
+              tasksCompletedCount: getFieldValue().increment(1),
+              streakCurrent: nextStreakCurrent,
+              streakBest: nextStreakBest,
+              lastCompletionDateKey: nextLastCompletionDateKey,
+              friends: Array.isArray(userData.friends) ? userData.friends : [],
+              communities: Array.isArray(userData.communities)
+                ? userData.communities
+                : [],
+              updatedAt: getFieldValue().serverTimestamp(),
+            },
+            { merge: true },
+          );
+        });
+        return;
+      } catch (error) {
+        lastError = error;
+        const message = error instanceof Error ? error.message : "";
+        const retryable =
+          message.includes("write batch") ||
+          message.includes("compaction") ||
+          message.includes("ABORTED") ||
+          message.includes("UNAVAILABLE");
+        if (!retryable || attempt === retries) {
+          throw error;
+        }
+        await new Promise((resolve) =>
+          setTimeout(resolve, 150 * (attempt + 1)),
+        );
       }
+    }
+    throw lastError;
+  }
 
-      transaction.set(
-        userRef,
-        {
-          dailyTasks: updatedDailyTasks,
-          completedTaskIds: getFieldValue().arrayUnion(completedTaskId),
-          carbonOffsetKgTotal: getFieldValue().increment(carbonOffsetKg),
-          tasksCompletedCount: getFieldValue().increment(1),
-          streakCurrent: nextStreakCurrent,
-          streakBest: nextStreakBest,
-          lastCompletionDateKey: nextLastCompletionDateKey,
-          friends: Array.isArray(userData.friends) ? userData.friends : [],
-          communities: Array.isArray(userData.communities)
-            ? userData.communities
-            : [],
-          updatedAt: getFieldValue().serverTimestamp(),
-        },
-        { merge: true },
-      );
-    });
+  try {
+    await runTransactionWithRetry(2);
   } catch (error) {
     if (error instanceof Error && error.message === "DAILY_TASK_NOT_FOUND") {
       return NextResponse.json(

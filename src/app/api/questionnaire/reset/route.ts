@@ -76,46 +76,47 @@ function getAdminDb() {
   return getAdminApp().firestore();
 }
 
+function getFieldValue() {
+  return admin.firestore.FieldValue;
+}
+
 function getBearerToken(request: Request): string | null {
   const authHeader = request.headers.get("authorization") ?? "";
   const match = authHeader.match(/^Bearer (.+)$/i);
   return match ? match[1] : null;
 }
 
-export async function GET(request: Request) {
+export async function POST(request: Request) {
   const token = getBearerToken(request);
   if (!token) {
-    return NextResponse.json({ error: "Missing Authorization Bearer token." }, { status: 401 });
+    return NextResponse.json(
+      { error: "Missing Authorization Bearer token." },
+      { status: 401 }
+    );
   }
 
+  let decoded;
   try {
-    await getAdminAuth().verifyIdToken(token);
+    decoded = await getAdminAuth().verifyIdToken(token);
   } catch {
     return NextResponse.json({ error: "Invalid or expired token." }, { status: 401 });
   }
 
-  const { searchParams } = new URL(request.url);
-  const uid = searchParams.get("uid") ?? "";
-  if (!uid) {
-    return NextResponse.json({ error: "Missing uid." }, { status: 400 });
-  }
+  const uid = decoded.uid;
+  const userRef = getAdminDb().collection("users").doc(uid);
 
-  const adminDb = getAdminDb();
-  const userSnap = await adminDb.collection("users").doc(uid).get();
-  if (!userSnap.exists) {
-    return NextResponse.json({ error: "User not found." }, { status: 404 });
-  }
-
-  const data = userSnap.data() ?? {};
-  return NextResponse.json(
+  await userRef.set(
     {
-      uid: userSnap.id,
-      email: data.email ?? "",
-      username: data.username ?? "",
-      city: data.city ?? "",
-      initialFootprintKg: data.initialFootprintKg ?? null,
-      carbonOffsetKgTotal: data.carbonOffsetKgTotal ?? 0
+      initialFootprintKg: null,
+      questionnaireAnswers: null,
+      questionnaireVersion: null,
+      questionnaireCompression: null,
+      dailyTasksMeta: null,
+      dailyTasks: [],
+      updatedAt: getFieldValue().serverTimestamp()
     },
-    { status: 200 }
+    { merge: true }
   );
+
+  return NextResponse.json({ ok: true });
 }

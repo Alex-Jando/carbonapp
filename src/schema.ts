@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const suggestionRequestSchema = z.object({
   questionnaireVersion: z.literal("v1"),
-  answers: z.record(z.unknown())
+  answers: z.record(z.string(), z.unknown())
 });
 
 export const suggestionSchema = z.object({

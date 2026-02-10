@@ -14,6 +14,7 @@ import {
 import { Button } from "@/src/app/components/ui/button";
 import { Alert, AlertDescription } from "@/src/app/components/ui/alert";
 import { CompletedTaskList } from "@/src/components/feed/CompletedTaskList";
+import { AppLogo } from "@/src/components/brand/AppLogo";
 
 type FriendProfile = {
   uid: string;
@@ -130,7 +131,10 @@ export default function FriendDetailPage() {
             <CardHeader className="space-y-2">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <div className="h-11 w-11 rounded-2xl bg-gradient-to-br from-emerald-400/90 to-lime-300/80 shadow-[0_16px_35px_rgba(16,185,129,0.18)]" />
+                  <AppLogo
+                    size={44}
+                    imageClassName="drop-shadow-[0_16px_28px_rgba(16,185,129,0.24)]"
+                  />
                   <div>
                     <CardTitle className="text-2xl tracking-tight">Friend Profile</CardTitle>
                     <CardDescription className="text-zinc-300">
@@ -181,7 +185,7 @@ export default function FriendDetailPage() {
                       </p>
                       <p className="mt-1 text-2xl font-semibold text-white">
                         {profile.initialFootprintKg !== null
-                          ? `${profile.initialFootprintKg} kg`
+                          ? `${profile.initialFootprintKg.toFixed(1)} kg`
                           : "N/A"}
                       </p>
                       <p className="text-xs text-zinc-400">Estimated per year</p>
@@ -191,7 +195,7 @@ export default function FriendDetailPage() {
                         Carbon Offset
                       </p>
                       <p className="mt-1 text-2xl font-semibold text-white">
-                        {profile.carbonOffsetKgTotal} kg
+                        {profile.carbonOffsetKgTotal.toFixed(1)} kg
                       </p>
                       <p className="text-xs text-zinc-400">Total offset achieved</p>
                     </div>

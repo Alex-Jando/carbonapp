@@ -9,8 +9,10 @@ function resolveServiceAccount() {
 
   const unwrap = (value: string) => {
     const trimmed = value.trim();
-    if ((trimmed.startsWith("'") && trimmed.endsWith("'")) ||
-        (trimmed.startsWith("\"") && trimmed.endsWith("\""))) {
+    if (
+      (trimmed.startsWith("'") && trimmed.endsWith("'")) ||
+      (trimmed.startsWith("\"") && trimmed.endsWith("\""))
+    ) {
       return trimmed.slice(1, -1);
     }
     return trimmed;
@@ -49,73 +51,82 @@ function getAdminApp() {
       serviceAccount?.project_id ??
       process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ??
       process.env.FIREBASE_PROJECT_ID;
+
     if (serviceAccount) {
       admin.initializeApp({
         credential: admin.credential.cert(serviceAccount),
-        projectId
+        projectId,
       });
     } else if (projectId) {
       admin.initializeApp({
         credential: admin.credential.applicationDefault(),
-        projectId
+        projectId,
       });
     } else {
       admin.initializeApp({
-        credential: admin.credential.applicationDefault()
+        credential: admin.credential.applicationDefault(),
       });
     }
   }
-  return admin.app();
-}
 
-function getAdminAuth() {
-  return getAdminApp().auth();
+  return admin.app();
 }
 
 function getAdminDb() {
   return getAdminApp().firestore();
 }
 
-function getBearerToken(request: Request): string | null {
-  const authHeader = request.headers.get("authorization") ?? "";
-  const match = authHeader.match(/^Bearer (.+)$/i);
-  return match ? match[1] : null;
+function normalizeDisplayName(value: unknown, fallback = "Anonymous") {
+  if (typeof value !== "string") return fallback;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : fallback;
+}
+
+function emailFallbackDisplay(email: unknown) {
+  if (typeof email !== "string") return "Anonymous";
+  const trimmed = email.trim();
+  if (!trimmed) return "Anonymous";
+  return trimmed.includes("@") ? trimmed.split("@")[0] : trimmed;
 }
 
 export async function GET(request: Request) {
-  const token = getBearerToken(request);
-  if (!token) {
-    return NextResponse.json({ error: "Missing Authorization Bearer token." }, { status: 401 });
-  }
-
-  try {
-    await getAdminAuth().verifyIdToken(token);
-  } catch {
-    return NextResponse.json({ error: "Invalid or expired token." }, { status: 401 });
-  }
-
   const { searchParams } = new URL(request.url);
-  const uid = searchParams.get("uid") ?? "";
-  if (!uid) {
-    return NextResponse.json({ error: "Missing uid." }, { status: 400 });
-  }
+  const limitParam = Number(searchParams.get("limit") ?? 10);
+  const limit = Math.min(
+    Math.max(Number.isFinite(limitParam) ? limitParam : 10, 1),
+    100,
+  );
 
   const adminDb = getAdminDb();
-  const userSnap = await adminDb.collection("users").doc(uid).get();
-  if (!userSnap.exists) {
-    return NextResponse.json({ error: "User not found." }, { status: 404 });
-  }
+  const snapshot = await adminDb
+    .collection("users")
+    .orderBy("carbonOffsetKgTotal", "desc")
+    .limit(limit)
+    .get();
 
-  const data = userSnap.data() ?? {};
+  const items = snapshot.docs.map((doc, index) => {
+    const data = doc.data() ?? {};
+    const carbonOffsetKgTotal = Math.round((Number(data.carbonOffsetKgTotal) || 0) * 10) / 10;
+    const tasksCompletedCount = Number(data.tasksCompletedCount) || 0;
+    const username =
+      normalizeDisplayName(data.username, "") ||
+      emailFallbackDisplay(data.email);
+
+    return {
+      rank: index + 1,
+      uid: doc.id,
+      username,
+      city: normalizeDisplayName(data.city, ""),
+      carbonOffsetKgTotal,
+      tasksCompletedCount,
+    };
+  });
+
   return NextResponse.json(
     {
-      uid: userSnap.id,
-      email: data.email ?? "",
-      username: data.username ?? "",
-      city: data.city ?? "",
-      initialFootprintKg: data.initialFootprintKg ?? null,
-      carbonOffsetKgTotal: data.carbonOffsetKgTotal ?? 0
+      items,
+      generatedAt: new Date().toISOString(),
     },
-    { status: 200 }
+    { status: 200 },
   );
 }

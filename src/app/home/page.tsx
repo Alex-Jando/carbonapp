@@ -278,6 +278,16 @@ export default function HomePage() {
         return [...existing, data.todayStats].sort((a, b) => a.dateKey.localeCompare(b.dateKey));
       });
     }
+
+    const resRecent = await fetchWithAuth(
+      `/api/completed-tasks?uid=${encodeURIComponent(uid)}&limit=15`,
+    );
+    if (resRecent) {
+      const recentData = await resRecent.json();
+      if (resRecent.ok) {
+        setRecentCompleted(Array.isArray(recentData.items) ? recentData.items : []);
+      }
+    }
   }
 
   async function handleLogout() {
@@ -286,6 +296,18 @@ export default function HomePage() {
     localStorage.removeItem("auth_refresh_token");
     localStorage.removeItem("auth_local_id");
     router.replace("/login");
+  }
+
+  async function handleRedoQuestionnaire() {
+    const res = await fetchWithAuth("/api/questionnaire/reset", { method: "POST" });
+    if (!res) return;
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setError(data.error ?? "Failed to reset questionnaire.");
+      return;
+    }
+    setInitialFootprintKg(null);
+    router.push("/questionnaire");
   }
 
   const todayLabel = new Date().toLocaleDateString("en-CA", {
@@ -366,6 +388,25 @@ export default function HomePage() {
                 </p>
               </div>
             )}
+
+            <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-6 shadow-[0_18px_60px_rgba(0,0,0,0.35)]">
+              <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/70">
+                Estimated Footprint
+              </p>
+              <p className="mt-2 text-3xl font-semibold text-white">
+                {initialFootprintKg.toFixed(0)} kg/year
+              </p>
+              <p className="text-sm text-zinc-400">
+                Estimated from your questionnaire responses.
+              </p>
+              <button
+                type="button"
+                onClick={handleRedoQuestionnaire}
+                className="mt-4 w-full rounded-full border border-emerald-400/30 bg-emerald-400/10 px-4 py-2 text-xs text-emerald-100 hover:border-emerald-300/60 hover:bg-emerald-400/15"
+              >
+                Redo questionnaire
+              </button>
+            </div>
           </div>
         </div>
 

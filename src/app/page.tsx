@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
+import { AppLogo } from "@/src/components/brand/AppLogo";
 
 import { Button } from "./components/ui/button";
 import { Card } from "./components/ui/card";
@@ -21,7 +22,6 @@ export default function HomePage() {
 
   return (
     <main className="relative min-h-dvh overflow-hidden bg-zinc-950 text-zinc-50">
-      {/* Ambient green background */}
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute -top-40 left-1/2 h-[520px] w-[520px] -translate-x-1/2 rounded-full bg-emerald-500/20 blur-3xl" />
         <div className="absolute -bottom-48 right-[-120px] h-[520px] w-[520px] rounded-full bg-lime-400/10 blur-3xl" />
@@ -29,7 +29,6 @@ export default function HomePage() {
         <div className="absolute inset-0 [background-image:linear-gradient(to_right,rgba(255,255,255,0.06)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.06)_1px,transparent_1px)] bg-[size:44px_44px] opacity-[0.18]" />
       </div>
 
-      {/* Floating accents */}
       <motion.div
         className="pointer-events-none absolute left-8 top-32 h-28 w-28 rounded-full bg-emerald-400/20 blur-2xl"
         animate={{ y: [0, -18, 0], x: [0, 10, 0] }}
@@ -46,15 +45,18 @@ export default function HomePage() {
           initial={{ opacity: 0, y: 18, filter: "blur(10px)" }}
           animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
           transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-          className="w-full max-w-xl text-center"
+          className="w-full max-w-4xl text-center"
         >
           <Card className="border-white/10 bg-white/[0.06] p-8 backdrop-blur-xl shadow-[0_25px_80px_rgba(0,0,0,0.55)]">
-            {/* Logo / mark */}
-            <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-400 to-lime-300 shadow-[0_18px_45px_rgba(16,185,129,0.25)]">
-              <span className="text-xl font-bold text-zinc-950">CO₂</span>
-            </div>
+            <AppLogo
+              size={72}
+              className="mx-auto mb-6 justify-center"
+              imageClassName="drop-shadow-[0_18px_35px_rgba(16,185,129,0.28)]"
+            />
 
-            <h1 className="text-3xl font-semibold tracking-tight">CarbonApp</h1>
+            <h1 className="text-3xl text-zinc-50 font-semibold tracking-tight">
+              Carbon Pals
+            </h1>
 
             <p className="mt-3 text-zinc-300">
               Track your carbon footprint. Make smarter choices. Reduce your
@@ -64,7 +66,7 @@ export default function HomePage() {
             <div className="mt-8 grid gap-4 sm:grid-cols-2">
               <Button
                 asChild
-                className="h-11 bg-gradient-to-r from-emerald-400 to-lime-300 text-zinc-950 shadow-[0_18px_55px_rgba(16,185,129,0.22)] hover:brightness-105 active:brightness-95"
+                className="h-11 bg-gradient-to-r from-emerald-600 via-emerald-500 to-lime-400/80 text-white shadow-[0_18px_55px_rgba(16,185,129,0.18)] hover:brightness-100 hover:ring-1 hover:ring-emerald-200/40 active:brightness-95"
               >
                 <Link href="/login">Log in</Link>
               </Button>
@@ -72,16 +74,57 @@ export default function HomePage() {
               <Button
                 asChild
                 variant="outline"
-                className="h-11 border-white/20 bg-white/[0.02] text-zinc-100 hover:bg-white/[0.08]"
+                className="h-11 border-white/20 bg-white/[0.02] text-zinc-100 hover:bg-white/[0.08] hover:text-zinc-100"
               >
                 <Link href="/signup">Create account</Link>
               </Button>
             </div>
 
             <p className="mt-6 text-xs text-zinc-500">
-              Secure • Private • Designed for sustainability
+              Secure - Private - Designed for sustainability
             </p>
           </Card>
+
+          <div className="mt-10 grid gap-4 md:grid-cols-3">
+            <Card className="border-white/10 bg-white/[0.04] p-5 text-left backdrop-blur">
+              <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/70">
+                Daily Focus
+              </p>
+              <h3 className="mt-2 text-lg font-semibold text-white">
+                AI-tailored tasks
+              </h3>
+              <p className="mt-2 text-sm text-zinc-400">
+                Get 10 low-effort actions each day to shrink your footprint
+                without big lifestyle changes.
+              </p>
+            </Card>
+
+            <Card className="border-white/10 bg-white/[0.04] p-5 text-left backdrop-blur">
+              <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/70">
+                Personal Insight
+              </p>
+              <h3 className="mt-2 text-lg font-semibold text-white">
+                Footprint baseline
+              </h3>
+              <p className="mt-2 text-sm text-zinc-400">
+                Start with a quick questionnaire to estimate your current
+                footprint and personalize your plan.
+              </p>
+            </Card>
+
+            <Card className="border-white/10 bg-white/[0.04] p-5 text-left backdrop-blur">
+              <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/70">
+                Momentum
+              </p>
+              <h3 className="mt-2 text-lg font-semibold text-white">
+                Progress + social
+              </h3>
+              <p className="mt-2 text-sm text-zinc-400">
+                Track streaks, carbon offset totals, and share wins with your
+                community and friends.
+              </p>
+            </Card>
+          </div>
         </motion.section>
       </div>
     </main>
