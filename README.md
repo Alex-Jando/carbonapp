@@ -1,4 +1,4 @@
-# Carbon App - GDG 2026
+# Carbon Pals - GDG 2026
 
 # Contributers
 
